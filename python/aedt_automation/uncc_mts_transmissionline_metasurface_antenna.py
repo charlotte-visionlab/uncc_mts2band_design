@@ -340,6 +340,7 @@ hfss.assign_perfecte_to_sheets(
        "is_infinite_gnd": False})
 
 l1 = 1.58
+unit_cell_length = 2 * l1
 thickness = 0.2
 gap_size = 0.16
 num_vertices = 4  # THIS MUST BE EVEN
@@ -373,36 +374,50 @@ inner_position_list[-1] += np.abs(0.5 * gap_size / edge_vector_last[1]) * edge_v
 
 unit_cell_position_list = outer_position_list + inner_position_list[::-1]
 for pt in unit_cell_position_list:
-    pt[2] = 0.5 * height_mm
+    pt[2] = 10 #0.5 * height_mm
+
+# unit_cell_position_list_rot = unit_cell_position_list.copy()
+# for i in range(len(unit_cell_position_list)):
+#     unit_cell_position_list_rot[i][0] = (unit_cell_position_list[i][0] * np.cos(np.pi/2)) - (unit_cell_position_list[i][1] * np.sin(np.pi/2))
+#     unit_cell_position_list_rot[i][1] = (unit_cell_position_list[i][0] * np.sin(np.pi/2)) + (unit_cell_position_list[i][1] * np.cos(np.pi/2))
 
 unit_cell_name_list = []
 unit_cell_list = []
+
 # ===LOOP==
 index = 0
-unit_cell_polyline_params = {
-    "position_list": unit_cell_position_list,
-    "segment_type": None,
-    "cover_surface": True,
-    "close_surface": True,
-    "name": "unit_cell_" + str(index),
-    "matname": None,
-    "xsection_type": None,
-    "xsection_orient": None,
-    "xsection_width": 1,
-    "xsection_topwidth": 1,
-    "xsection_height": 1,
-    "xsection_num_seg": 0,
-    "xsection_bend_type": None,
-    "non_model": False
-}
-unit_cell_0 = hfss.modeler.create_polyline(**unit_cell_polyline_params)
-unit_cell_0.color = metal_color
-# hfss.assign_perfecte_to_sheets(
-#     **{"sheet_list": [unit_cell_0.name],
-#        "sourcename": None,
-#        "is_infinite_gnd": False})
-unit_cell_list.append(unit_cell_0)
-unit_cell_name_list.append(unit_cell_0.name)
+init_pos = np.array([-0.5*L2, -0.5*(wr-unit_cell_length), 0])
+unit_cell_position_list[:] = unit_cell_position_list[:] + init_pos  # shift to top-left corner
+offset = np.arange(0, L2 - 0.5*unit_cell_length, unit_cell_length)
+unit_cell_position_list_new = []
+for of in offset:
+    unit_cell_position_list_new[:] = unit_cell_position_list[:] + np.asarray([of, 0, 0])    # offset to the right
+    unit_cell_polyline_params = {
+        "position_list": unit_cell_position_list_new,
+        "segment_type": None,
+        "cover_surface": True,
+        "close_surface": True,
+        "name": "unit_cell_" + str(index),
+        "matname": None,
+        "xsection_type": None,
+        "xsection_orient": None,
+        "xsection_width": 1,
+        "xsection_topwidth": 1,
+        "xsection_height": 1,
+        "xsection_num_seg": 0,
+        "xsection_bend_type": None,
+        "non_model": False
+    }
+    unit_cell_0 = hfss.modeler.create_polyline(**unit_cell_polyline_params)
+    unit_cell_0.color = metal_color
+    # hfss.assign_perfecte_to_sheets(
+    #     **{"sheet_list": [unit_cell_0.name],
+    #        "sourcename": None,
+    #        "is_infinite_gnd": False})
+    unit_cell_list.append(unit_cell_0)
+    unit_cell_name_list.append(unit_cell_0.name)
+    index = index + 1
+
 # ===LOOP==
 
 subtract_params = {
@@ -428,4 +443,4 @@ time_difference_str = str(time_difference)
 ###############################################################################
 # Close Ansys Electronics Desktop
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# hfss.release_desktop(close_projects=True, close_desktop=True)
+hfss.release_desktop(close_projects=True, close_desktop=True)
