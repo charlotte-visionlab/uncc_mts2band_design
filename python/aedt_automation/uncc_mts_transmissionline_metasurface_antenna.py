@@ -41,7 +41,7 @@ speed_of_light = 2.99792458e8
 frequency = 10e9
 wavelength = speed_of_light / frequency
 
-height_cm = 100 * 1.57e-3  # <=== dielectric slab height in meters
+height_mm = 1.57  # mm   <=== dielectric slab height in centimeters
 # height = 2.54e-3  # m
 fill_pct = 0.5 * np.array([1.0, 1.0])
 
@@ -53,24 +53,10 @@ load_filename_matlab = path + filename_prefix + "_" + datetime_str + "_" + machi
 # unit_cell_database = scipy.io.loadmat(load_filename_matlab)
 # eigen_modes = unit_cell_database["database"][0][0]["mode_solutions"]
 #
-# cell_type = str(np.squeeze(unit_cell_database["database"][0][0]["cell_type"].all()))
-cell_type = "SQUARE_PATCH"
-
-monopole_length_cm = 0.3  # cm
-
-# additional parameter for "SEIVENPIPER MUSHROOM"
-mushroom_via_radius = 0.12e-3  # m
-
-if cell_type == "ELLIPTICAL DISC":
-    minor_to_major_axis_ratio = 0.75  # percent
-    ellipse_XY_rotation_angle_deg = 45  # degrees
-else:
-    minor_to_major_axis_ratio = 1.0  # percent
-    ellipse_XY_rotation_angle_deg = 0  # degrees
 
 # DIELECTRIC MATERIALS
-# dielectric_material_name = "Rogers RT/duroid 5880 (tm)"
-dielectric_material_name = "Rogers RT/duroid 6010/6010LM (tm)"
+dielectric_material_name = "Rogers RT/duroid 5880 (tm)"
+# dielectric_material_name = "Rogers RT/duroid 6010/6010LM (tm)"
 ground_plane_material_name = "pec"
 # ground_plane_material_name = "copper"
 unit_cell_material_name = "pec"
@@ -84,98 +70,44 @@ dielectric_color = [255, 255, 128]
 radiation_box_color = [128, 255, 255]
 perfectly_matched_layer_color = [255, 128, 128]
 
-radiation_volume_height_cm = height_cm + 6 * height_cm
-
-Zvals = np.linspace(160, 250, num=600)
-gap_list = np.linspace(0.2, 1, num=600)
-impedance_curve = np.array([107 + 65.5 / gap - 12.7 / gap ** 2 + 0.94 / gap ** 3 for gap in gap_list])
-
-
-def find_gap(impedance):
-    x_axis_index = np.argmin(np.abs(impedance_curve - np.imag(impedance)))
-    gap = gap_list[x_axis_index]
-    return gap
-
-
-modulation_constant_X = np.mean(impedance_curve)
-modulation_constant_M = np.min(np.abs(np.array([np.min(impedance_curve) - modulation_constant_X,
-                                                np.max(impedance_curve) - modulation_constant_X])))
-
-Z0 = 376.73031366857
-cell_size_cm = 3.0e-1
-phi = 0
-theta_L = 45 * np.pi / 180
-dielectric_constant = 2.2  # Duroid 5880
-# k0 = 2 * np.pi * frequency / speed_of_light
-k0 = 2 * np.pi * frequency
-# k0 = 2 * np.pi * frequency / speed_of_light
-theta_L = 80 * np.pi / 180
-phi = 30 * np.pi / 180
-
+d0 = 8  # mm
+t0 = 3  # mm
+L1 = 50  # mm
+W = 22  # mm
+t1 = 6  # mm
+d1 = 4  # mm
+wr = 13  # mm
+t2 = 5  # mm
+d2 = 2.5  # mm
+wh = 13  # mm
+L2 = 200  # mm
+m = 9.4  # mm
+p = 8  # mm
+t3 = 7  # mm
+d3 = 1.8  # mm
+t4 = 5.7  # mm
+d4 = 1.7  # mm
+h = 0.787  # mm
+# For the trapezoid unit, the geometric sizes are set as:
+l3 = 2.9  # mm
+l4 = 3.9  # mm
+l5 = 4.9  # mm
+s1 = 0.9  # mm
+w3 = 0.2  # mm
+l6 = 3  # mm
+l7 = 4  # mm
+l8 = 5  # mm
+s2 = 1  # mm
+antenna_length_mm = 2 * (d0 + d2) + L2
+antenna_width_mm = W
 # antenna_dimensions_xy_cm = np.array([40, 12.4])
 # antenna_margin_xy_cm = np.array([1, 1])
 # antenna_coord_origin_xy_cm = np.array([10, 6.2])
 # antenna_dimensions_xy_cm = np.array([10, 5.4])
-antenna_dimensions_xy_cm = np.array([12, 1.2])
-antenna_margin_xy_cm = np.array([1.25, .25])
+antenna_dimensions_xy_mm = np.array([antenna_length_mm, antenna_width_mm])
+antenna_margin_xy_mm = np.array([0, 0])
 # location of the coordinate system origin with respect to the top left corner of the antenna dimensions rectangle
-antenna_coord_origin_xy_cm = np.array([0.3 * antenna_dimensions_xy_cm[0],
-                                       0.5 * antenna_dimensions_xy_cm[1]])
-
-num_cells_x = np.floor((antenna_dimensions_xy_cm[0] - 2 * antenna_margin_xy_cm[0]) / cell_size_cm)
-num_cells_y = np.floor((antenna_dimensions_xy_cm[1] - 2 * antenna_margin_xy_cm[1]) / cell_size_cm)
-
-if num_cells_x % 2 == 0:
-    num_cells_x += 1
-if num_cells_y % 2 == 0:
-    num_cells_y += 1
-
-lhp_cell_count = np.floor((num_cells_x - 1) * antenna_coord_origin_xy_cm[0] / antenna_dimensions_xy_cm[0])
-rhp_cell_count = num_cells_x - 1 - lhp_cell_count
-bhp_cell_count = np.floor(num_cells_y * antenna_coord_origin_xy_cm[1] / antenna_dimensions_xy_cm[1])
-thp_cell_count = num_cells_y - 1 - bhp_cell_count
-
-Z_surf_avg = modulation_constant_X  # value of X parameter
-n_surf_avg = Z0 / Z_surf_avg  # Z0/Z_avg
-k_surf_avg = k0 * n_surf_avg
-# k_surf_avg = k0 * np.sqrt(dielectric_constant)
-x_cell_centers_cm = np.arange(-cell_size_cm * (lhp_cell_count - 0.5),
-                              cell_size_cm * (rhp_cell_count + 0.5 + 1.0e-4),
-                              cell_size_cm)
-y_cell_centers_cm = np.arange(-cell_size_cm * (bhp_cell_count - 0.5),
-                              cell_size_cm * (thp_cell_count + 0.5 + 1.0e-4),
-                              cell_size_cm)
-[x_grid, y_grid] = np.meshgrid(x_cell_centers_cm, y_cell_centers_cm)
-x_grid = x_grid * 1e-2  # convert to meters
-y_grid = y_grid * 1e-2  # convert to meters
-r = np.sqrt(x_grid ** 2 + y_grid ** 2)
-
-phase_radiation_pointing_function = k0 * x_grid * np.sin(theta_L) + 1j * phi
-phase_source_excitation = k_surf_avg * r
-
-psi_rad = np.exp(1j * phase_radiation_pointing_function)
-psi_surf = np.exp(-1j * phase_source_excitation)
-
-# plt.plot(x, np.angle(psi_rad*np.conj(psi_surf)))
-# plt.plot(x, real(psi_rad))
-# radial_amplitude = np.cos(k * n * r)
-# radiation_amplitude = np.cos(k * x_grid * np.sin(theta_L) + phi)
-radial_amplitude = np.real(psi_surf)
-radiation_amplitude = np.real(psi_rad)
-# added_amplitude = np.cos(-k * n * r + k * n * x_grid * np.sin(theta_L))
-added_amplitude = np.real(psi_rad * psi_surf)
-# Z_xy = 1j * (modulation_constant_X + modulation_constant_M * np.cos(-k * n * r + k * n * x_grid * np.sin(theta_L)))
-Z_xy_grid = 1j * (modulation_constant_X + modulation_constant_M * np.real(psi_rad * psi_surf))
-
-plt.subplot(311)
-plt.imshow(radial_amplitude, 'gray', origin='lower', interpolation='bicubic')
-plt.subplot(312)
-plt.imshow(radiation_amplitude, 'gray', origin='lower', interpolation='bicubic')
-plt.subplot(313)
-plt.imshow(added_amplitude, 'gray', origin='lower', interpolation='bicubic')
-plt.show(block=False)
-print("max = {}".format(np.max(Z_xy_grid.ravel())))
-print("min = {}".format(np.min(Z_xy_grid.ravel())))
+antenna_coord_origin_xy_mm = 0.5 * antenna_dimensions_xy_mm
 
 # define a custom projectname and design name to allow multiple runs to simultaneously run on a single host
 time_start = datetime.now()
@@ -206,71 +138,6 @@ def matplotlib_pyplot_setup():
     # plt.rc('y-axis', fontsize = SMALL_SIZE)
 
 
-def make_SquarePatchUnitCell(fill_ratio):
-    unit_cell_params_local = {
-        "name": "cell_0",
-        "position": cm2mm * np.array([0, 0, height_cm / 2]),
-        "size": cm2mm * np.array([fill_ratio[0] * cell_size_cm, fill_ratio[1] * cell_size_cm]),
-        "scale_factor": 1.0,
-        "material_name": unit_cell_material_name,
-        "color": metal_color
-    }
-    cell_0_local = unit_cell.SquarePatchUnitCell(**unit_cell_params_local)
-    cell_0_local.create_model(hfss)
-    return cell_0_local
-
-
-def make_SievenpiperMushroomUnitCell(fill_ratio):
-    unit_cell_params_local = {
-        "name": "cell_0",
-        "position": cm2mm * np.array([0, 0, height_cm / 2]),
-        "size_patch": cm2mm * np.array([fill_ratio[0] * cell_size_cm, fill_ratio[1] * cell_size_cm]),
-        "size_via": cm2mm * np.array([mushroom_via_radius, height_cm]),
-        "scale_factor": 1.0,
-        "material_name": unit_cell_material_name,
-        "color": metal_color
-    }
-    cell_0_local = unit_cell.SievenpiperMushroomUnitCell(**unit_cell_params_local)
-    cell_0_local.create_model(hfss)
-    return cell_0_local
-
-
-def make_EllipticalDiscUnitCell(fill_ratio, rotation_xy_deg=0):
-    fill_ratio[1] = minor_to_major_axis_ratio * fill_ratio[1]
-    unit_cell_params_local = {
-        "name": "cell_0",
-        "position": cm2mm * np.array([0, 0, height_cm / 2]),
-        "size": cm2mm * np.array([fill_ratio[0] * cell_size_cm,
-                                  fill_ratio[1] * cell_size_cm]),
-        "rotation_xy_deg": rotation_xy_deg,
-        "scale_factor": 1.0,
-        "material_name": unit_cell_material_name,
-        "color": metal_color
-    }
-    if fill_ratio[0] != fill_ratio[1]:
-        cell_0_local = unit_cell.EllipticalDiscUnitCell(**unit_cell_params_local)
-    else:
-        cell_0_local = unit_cell.CircularDiscUnitCell(**unit_cell_params_local)
-    cell_0_local.create_model(hfss)
-    return cell_0_local
-
-
-def make_CircularDiscUnitCell(fill_ratio):
-    return make_EllipticalDiscUnitCell(np.array([fill_ratio[0], fill_ratio[0]]))
-
-
-def make_unit_cell(cell_type_local, fill_ratio):
-    if cell_type_local == "SQUARE PATCH":
-        unit_cell_local = make_SquarePatchUnitCell(fill_ratio)
-    elif cell_type_local == "SIEVENPIPER MUSHROOM":
-        unit_cell_local = make_SievenpiperMushroomUnitCell(fill_ratio)
-    elif cell_type_local == "ELLIPTICAL DISC":
-        unit_cell_local = make_EllipticalDiscUnitCell(fill_ratio, ellipse_XY_rotation_angle_deg)
-    elif cell_type_local == "CIRCULAR DISC":
-        unit_cell_local = make_CircularDiscUnitCell(fill_ratio)
-    return unit_cell_local
-
-
 matplotlib_pyplot_setup()
 
 ###############################################################################
@@ -298,22 +165,22 @@ hfss = pyaedt.Hfss(
 )
 
 hfss.modeler.model_units = 'mm'
-cm2mm = 10
+# cm2mm = 10
 hfss.autosave_disable()
 
 ###############################################################################
 # Define HFSS Variables
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-hfss.variable_manager.set_variable("wavelength", expression="{}mm".format(cm2mm * wavelength))
+# hfss.variable_manager.set_variable("wavelength", expression="{}mm".format(cm2mm * wavelength))
 
 ###############################################################################
 # Define geometries
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-ground_plane_position = cm2mm * np.array([-antenna_coord_origin_xy_cm[0],
-                                          -antenna_coord_origin_xy_cm[1],
-                                          -height_cm / 2])
-ground_plane_size = cm2mm * np.array([antenna_dimensions_xy_cm[0],
-                                      antenna_dimensions_xy_cm[1]])
+ground_plane_position = -0.5 * np.array([antenna_dimensions_xy_mm[0],
+                                         antenna_dimensions_xy_mm[1],
+                                         height_mm])
+ground_plane_size = np.array([antenna_dimensions_xy_mm[0],
+                              antenna_dimensions_xy_mm[1]])
 
 #  csPlane is either "XY", "YZ", or "XZ"
 
@@ -335,7 +202,7 @@ hfss.modeler.fit_all()
 dielectric_slab_position = ground_plane_position
 dielectric_slab_size = np.array([ground_plane_size[0],
                                  ground_plane_size[1],
-                                 cm2mm * height_cm])
+                                 height_mm])
 dielectric_slab_params = {"name": "dielectric_slab",
                           "position": "{}mm,{}mm,{}mm".format(dielectric_slab_position[0],
                                                               dielectric_slab_position[1],
@@ -347,269 +214,203 @@ dielectric_slab_params = {"name": "dielectric_slab",
 dielectric_slab_geom = hfss.modeler.create_box(**dielectric_slab_params)
 dielectric_slab_geom.color = dielectric_color
 
-unit_cell_list = []
-cell_idx = 0
-x_grid = x_grid.ravel()
-y_grid = y_grid.ravel()
-for cell_idx, Z_xy in enumerate(Z_xy_grid.ravel()):
-    coord_x_cm = 100 * x_grid[cell_idx]
-    coord_y_cm = 100 * y_grid[cell_idx]
-    # Z_xy = Z_xy_grid[cell_idx]
-    gap_mm = find_gap(Z_xy)
-    patch_side_length_mm = cm2mm * cell_size_cm - gap_mm
-    fill_ratio = (patch_side_length_mm / (cm2mm * cell_size_cm)) * np.ones(2)
-    cell_position = cm2mm * np.array([coord_x_cm - (cell_size_cm / 2),
-                                      coord_y_cm - (cell_size_cm / 2),
-                                      height_cm / 2])
-    cell_size = cm2mm * np.array([fill_ratio[0] * cell_size_cm, fill_ratio[1] * cell_size_cm])
-    unit_cell_params_local = {
-        "name": "cell_{:05d}".format(cell_idx),
-        "position": cell_position,
-        "size": cell_size,
-        "scale_factor": 1.0,
-        "material_name": unit_cell_material_name,
-        "color": metal_color
-    }
-    cell_idx += 1
-    cell_0_local = unit_cell.SquarePatchUnitCell(**unit_cell_params_local)
-    cell_0_local.create_model(hfss)
-    hfss.assign_perfecte_to_sheets(
-        **{"sheet_list": cell_0_local.get_model_names(),
-           "sourcename": None,
-           "is_infinite_gnd": False})
-    unit_cell_list.append(unit_cell)
+transmission_line_position = 0.5 * np.array([-L2,
+                                             -antenna_dimensions_xy_mm[1],
+                                             height_mm])
+transmission_line_size = np.array([L2,
+                                   antenna_dimensions_xy_mm[1]])
+transmission_line_plane_params = {"name": "transmission_line",
+                                  "csPlane": "XY",
+                                  "position": "{}mm,{}mm,{}mm".format(transmission_line_position[0],
+                                                                      transmission_line_position[1],
+                                                                      transmission_line_position[2]).split(","),
+                                  "dimension_list": "{}mm,{}mm".format(transmission_line_size[0],
+                                                                       transmission_line_size[1]).split(","),
+                                  "matname": ground_plane_material_name,
+                                  "is_covered": True}
+transmission_line_plane_geom = hfss.modeler.create_rectangle(**transmission_line_plane_params)
+transmission_line_plane_geom.color = metal_color
 
-# MAKE A HOLE FOR THE CYLINDRICAL SOURCE
-# Construct the via from the ground plane to the metal patch
-# s_axis is "X", "Y" or "Z"
-monopole_position = cm2mm * np.array([0, 0, height_cm / 2 - monopole_length_cm])
-monopole_size_cm = 0.05  # mm
-monopole_params = {"name": "monopole_antenna",
-                   "cs_axis": "Z",
-                   "position": "{}mm,{}mm,{}mm".format(monopole_position[0],
-                                                       monopole_position[1],
-                                                       monopole_position[2]).split(","),
-                   "radius": "{}mm".format(cm2mm * monopole_size_cm / 2),
-                   "height": "{}mm".format(cm2mm * monopole_length_cm),
-                   "numSides": 0,
-                   "matname": "pec"}
-monopole_geom = hfss.modeler.create_cylinder(**monopole_params)
-monopole_geom.color = metal_color
+port_index = 0
+#  build a feed structure having feed_length_cm length along the Y axis (the propagation axis)
+trapezoid_length_mm = d2
+feed_rect_length_mm = 0.5 * (antenna_length_mm - L2 - 2 * trapezoid_length_mm)
+feed_total_length_mm = feed_rect_length_mm + trapezoid_length_mm
+feed_rect_width_mm = t0
+trapezoid_top_width = feed_rect_width_mm
+trapezoid_bottom_width = t2
+feed_rect_position = np.array([-0.5 * antenna_length_mm,
+                               -0.5 * feed_rect_width_mm,
+                               0.5 * height_mm])
+feed_rect_size = np.array([feed_rect_length_mm, feed_rect_width_mm])
+feed_rect_params = {"name": "feed_rectanglar_portion_" + str(port_index),
+                    "csPlane": "XY",
+                    "position": "{}mm,{}mm,{}mm".format(feed_rect_position[0],
+                                                        feed_rect_position[1],
+                                                        feed_rect_position[2]).split(","),
+                    "dimension_list": "{}mm,{}mm".format(feed_rect_size[0],
+                                                         feed_rect_size[1]).split(","),
+                    "matname": ground_plane_material_name,
+                    "is_covered": True}
+feed_rect_geom_0 = hfss.modeler.create_rectangle(**feed_rect_params)
+feed_rect_geom_0.color = metal_color
+
+trap_position_list = np.array([np.array([feed_rect_position[0] + feed_rect_size[0],
+                                         feed_rect_position[1], feed_rect_position[2]]),
+                               np.array([feed_rect_position[0] + feed_rect_size[0],
+                                         feed_rect_position[1] + trapezoid_top_width, feed_rect_position[2]]),
+                               np.array([feed_rect_position[0] + feed_rect_size[0] + trapezoid_length_mm,
+                                         0.5 * trapezoid_bottom_width, feed_rect_position[2]]),
+                               np.array([feed_rect_position[0] + feed_rect_size[0] + trapezoid_length_mm,
+                                         -0.5 * trapezoid_bottom_width, feed_rect_position[2]])])
+trap_position_list = [elem.tolist() for elem in trap_position_list]
+trap_polyline_params = {
+    "position_list": trap_position_list,
+    "segment_type": None,
+    "cover_surface": True,
+    "close_surface": True,
+    "name": "feed_trapezoid_portion_" + str(port_index),
+    "matname": None,
+    "xsection_type": None,
+    "xsection_orient": None,
+    "xsection_width": 1,
+    "xsection_topwidth": 1,
+    "xsection_height": 1,
+    "xsection_num_seg": 0,
+    "xsection_bend_type": None,
+    "non_model": False
+}
+feed_trap_geom_0 = hfss.modeler.create_polyline(**trap_polyline_params)
+feed_trap_geom_0.color = metal_color
+
+port_index = 1
+#  build a feed structure having feed_length_cm length along the Y axis (the propagation axis)
+feed_rect_position = np.array([0.5 * antenna_length_mm - feed_rect_length_mm,
+                               0.5 * feed_rect_width_mm - 0.5 * feed_rect_width_mm,
+                               0.5 * height_mm])
+feed_rect_size = np.array([feed_rect_length_mm, feed_rect_width_mm])
+feed_rect_params = {"name": "feed_rectanglar_portion_" + str(port_index),
+                    "csPlane": "XY",
+                    "position": "{}mm,{}mm,{}mm".format(feed_rect_position[0],
+                                                        feed_rect_position[1],
+                                                        feed_rect_position[2]).split(","),
+                    "dimension_list": "{}mm,{}mm".format(feed_rect_size[0],
+                                                         feed_rect_size[1]).split(","),
+                    "matname": ground_plane_material_name,
+                    "is_covered": True}
+feed_rect_geom_1 = hfss.modeler.create_rectangle(**feed_rect_params)
+feed_rect_geom_1.color = metal_color
+
+trap_position_list = np.array([np.array([feed_rect_position[0],
+                                         feed_rect_position[1], feed_rect_position[2]]),
+                               np.array([feed_rect_position[0],
+                                         feed_rect_position[1] + trapezoid_top_width, feed_rect_position[2]]),
+                               np.array([feed_rect_position[0] - trapezoid_length_mm,
+                                         0.5 * trapezoid_bottom_width + 0.5 * feed_rect_width_mm,
+                                         feed_rect_position[2]]),
+                               np.array([feed_rect_position[0] - trapezoid_length_mm,
+                                         -0.5 * trapezoid_bottom_width + 0.5 * feed_rect_width_mm,
+                                         feed_rect_position[2]])])
+trap_position_list = [elem.tolist() for elem in trap_position_list]
+trap_polyline_params = {
+    "position_list": trap_position_list,
+    "segment_type": None,
+    "cover_surface": True,
+    "close_surface": True,
+    "name": "feed_trapezoid_portion_" + str(port_index),
+    "matname": None,
+    "xsection_type": None,
+    "xsection_orient": None,
+    "xsection_width": 1,
+    "xsection_topwidth": 1,
+    "xsection_height": 1,
+    "xsection_num_seg": 0,
+    "xsection_bend_type": None,
+    "non_model": False
+}
+feed_trap_geom_1 = hfss.modeler.create_polyline(**trap_polyline_params)
+feed_trap_geom_1.color = metal_color
+
+hfss.assign_perfecte_to_sheets(
+    **{"sheet_list": [ground_plane_geom.name,
+                      transmission_line_plane_geom.name,
+                      feed_rect_geom_0.name, feed_trap_geom_0.name,
+                      feed_rect_geom_1.name, feed_trap_geom_1.name],
+       "sourcename": None,
+       "is_infinite_gnd": False})
+
+l1 = 1.58
+thickness = 0.2
+gap_size = 0.16
+num_vertices = 4  # THIS MUST BE EVEN
+delta_angle_deg = 360 / num_vertices
+angle_list = np.arange(0, 361, delta_angle_deg) - 180
+outer_radius = l1
+inner_radius = l1 - thickness
+outer_position_list = []
+inner_position_list = []
+for angle in angle_list:
+    x_outer = outer_radius * np.cos(angle * np.pi / 180)
+    y_outer = outer_radius * np.sin(angle * np.pi / 180)
+    x_inner = inner_radius * np.cos(angle * np.pi / 180)
+    y_inner = inner_radius * np.sin(angle * np.pi / 180)
+    outer_position_list.append(np.array([x_outer, y_outer, 0]))
+    inner_position_list.append(np.array([x_inner, y_inner, 0]))
+
+edge_vector_first = outer_position_list[1] - outer_position_list[0]
+edge_vector_first *= 1 / np.linalg.norm(edge_vector_first)
+outer_position_list[0] += np.abs(0.5 * gap_size / edge_vector_first[1]) * edge_vector_first
+edge_vector_last = outer_position_list[-2] - outer_position_list[-1]
+edge_vector_last *= 1 / np.linalg.norm(edge_vector_last)
+outer_position_list[-1] += np.abs(0.5 * gap_size / edge_vector_last[1]) * edge_vector_last
+
+edge_vector_first = inner_position_list[1] - inner_position_list[0]
+edge_vector_first *= 1 / np.linalg.norm(edge_vector_first)
+inner_position_list[0] += np.abs(0.5 * gap_size / edge_vector_first[1]) * edge_vector_first
+edge_vector_last = inner_position_list[-2] - inner_position_list[-1]
+edge_vector_last *= 1 / np.linalg.norm(edge_vector_last)
+inner_position_list[-1] += np.abs(0.5 * gap_size / edge_vector_last[1]) * edge_vector_last
+
+unit_cell_position_list = outer_position_list + inner_position_list[::-1]
+for pt in unit_cell_position_list:
+    pt[2] = 0.5 * height_mm
+
+unit_cell_name_list = []
+unit_cell_list = []
+# ===LOOP==
+index = 0
+unit_cell_polyline_params = {
+    "position_list": unit_cell_position_list,
+    "segment_type": None,
+    "cover_surface": True,
+    "close_surface": True,
+    "name": "unit_cell_" + str(index),
+    "matname": None,
+    "xsection_type": None,
+    "xsection_orient": None,
+    "xsection_width": 1,
+    "xsection_topwidth": 1,
+    "xsection_height": 1,
+    "xsection_num_seg": 0,
+    "xsection_bend_type": None,
+    "non_model": False
+}
+unit_cell_0 = hfss.modeler.create_polyline(**unit_cell_polyline_params)
+unit_cell_0.color = metal_color
+# hfss.assign_perfecte_to_sheets(
+#     **{"sheet_list": [unit_cell_0.name],
+#        "sourcename": None,
+#        "is_infinite_gnd": False})
+unit_cell_list.append(unit_cell_0)
+unit_cell_name_list.append(unit_cell_0.name)
+# ===LOOP==
 
 subtract_params = {
-    "blank_list": ["dielectric_slab"],
-    "tool_list": ["monopole_antenna"],
+    "blank_list": [transmission_line_plane_geom.name],
+    "tool_list": unit_cell_name_list,
     "keep_originals": True
 }
 hfss.modeler.subtract(**subtract_params)
-
-feed_hole_position = cm2mm * np.array([0, 0, -height_cm / 2])
-feed_hole_size_cm = monopole_size_cm + 0.05  # mm
-feed_hole_ellipse_params = {"name": "monopole_feed_hole",
-                            "cs_plane": "XY",
-                            "position": "{}mm,{}mm,{}mm".format(feed_hole_position[0],
-                                                                feed_hole_position[1],
-                                                                feed_hole_position[2]).split(","),
-                            "major_radius": "{}mm".format(cm2mm * feed_hole_size_cm / 2),
-                            "ratio": 1.0,
-                            "matname": "pec",
-                            "is_covered": True}
-unit_cell_via_geom = hfss.modeler.create_ellipse(**feed_hole_ellipse_params)
-unit_cell_via_geom.color = metal_color
-subtract_params = {
-    "blank_list": ["cell_ground_plane"],
-    "tool_list": ["monopole_feed_hole"],
-    "keep_originals": False
-}
-hfss.modeler.subtract(**subtract_params)
-
-monopole_shield_position = np.array([0, 0, monopole_position[2]])
-monopole_shield_length_mm = (cm2mm * -height_cm / 2) - monopole_position[2]
-monopole_shield_params = {"name": "monopole_shield",
-                          "cs_axis": "Z",
-                          "position": "{}mm,{}mm,{}mm".format(monopole_shield_position[0],
-                                                              monopole_shield_position[1],
-                                                              monopole_shield_position[2]).split(","),
-                          "radius": "{}mm".format(cm2mm * feed_hole_size_cm / 2),
-                          "height": "{}mm".format(monopole_shield_length_mm),
-                          "numSides": 0,
-                          "matname": "pec"}
-monopole_shield_geom = hfss.modeler.create_cylinder(**monopole_shield_params)
-monopole_shield_geom.color = metal_color
-monopole_shield_geom.transparency = 0.8
-
-# hfss.oeditor.DetachFaces()
-detached_face_names = hfss.oeditor.DetachFaces(
-    ["NAME:Selections",
-     "Selections:=", "monopole_shield",
-     "NewPartsModelFlag:=", "Model"
-     ],
-    ["NAME:Parameters",
-     ["NAME:DetachFacesToParameters",
-      "FacesToDetach:=", [monopole_shield_geom.faces[0].id, monopole_shield_geom.faces[1].id]]])
-
-hfss.modeler.delete(detached_face_names[0])
-
-hfss.assign_perfecte_to_sheets(
-    **{"sheet_list": "cell_ground_plane",
-       "sourcename": None,
-       "is_infinite_gnd": False})
-hfss.assign_perfecte_to_sheets(
-    **{"sheet_list": "monopole_shield",
-       "sourcename": None,
-       "is_infinite_gnd": False})
-
-lumped_port_sheet_geom = hfss.modeler[detached_face_names[1]]
-# Integration line can be two points or one of the following:
-#           ``XNeg``, ``YNeg``, ``ZNeg``, ``XPos``, ``YPos``, and ``ZPos``
-lumped_port_params = {  # "signal": None,
-    "signal": detached_face_names[1],
-    "reference": "monopole_shield",
-    "create_port_sheet": False,
-    "port_on_plane": True,
-    # "integration_line": "XPos",
-    "integration_line": [lumped_port_sheet_geom.bottom_face_z.center,
-                         lumped_port_sheet_geom.bottom_face_z.top_edge_x.midpoint],
-    "impedance": 50,
-    "name": "source_port",
-    "renormalize": False,
-    "deembed": False,
-    "terminals_rename": False
-}
-hfss.lumped_port(**lumped_port_params)
-
-# hfss.add_3d_component_array_from_json()
-# sma_connector_cs_params = {
-#     "origin": "{}mm,{}mm,{}mm".format(monopole_shield_position[0],
-#                                       monopole_shield_position[1],
-#                                       monopole_shield_position[2]).split(","),
-#     "reference_cs": "Global",
-#     "name": None,
-#     "mode": "axis",
-#     "view": "iso",
-#     "x_pointing": [1, 0, 0],
-#     "y_pointing": [0, 1, 0],
-#     "psi": 0,
-#     "theta": 0,
-#     "phi": 0,
-#     "u": None
-# }
-# hfss.modeler.create_coordinate_system(**sma_connector_cs_params)
-# sma_component_params = {"comp_file": "components/SMA_connector.a3dcomp",
-#                         "geo_params": None,
-#                         "sz_mat_params": "",
-#                         "sz_design_params": "",
-#                         "targetCS": "Global",
-#                         "name": None,
-#                         "password": "",
-#                         "auxiliary_dict": False
-#                         }
-# hfss.modeler.insert_3d_component(**sma_component_params)
-# open_region_params = {
-#     "Frequency": "{}GHz".format(frequency/1e9), "Boundary": "Radiation", "ApplyInfiniteGP": False, "GPAXis": "-z"
-# }
-# hfss.create_open_region(open_region_params)
-module = hfss.get_module("ModelSetup")
-module.CreateOpenRegion(
-    [
-        "NAME:Settings",
-        "OpFreq:=", "17GHz",
-        "Boundary:=", "Radiation",
-        "ApplyInfiniteGP:=", False
-    ])
-# "definition": INFINITE_SPHERE_TYPE.ThetaPhi,
-# far_field_infinite_sphere_params = {
-#     "name": "Infinite_Sphere_Radiation",
-#     "x_start": -180,
-#     "x_stop": 180,
-#     "x_step": 10,
-#     "y_start": -180,
-#     "y_stop": 180,
-#     "y_step": 10,
-#     "units": "deg",
-#     "custom_radiation_faces": None,
-#     "custom_coordinate_system": None,
-#     "use_slant_polarization": False,
-#     "polarization_angle": 45
-# }
-# infinite_sphere_far_field = hfss.insert_infinite_sphere(far_field_infinite_sphere_params)
-# far_field_infinite_sphere_params_ext = {
-#     "Polarization": "Linear",
-#     "SlantAngle": '45deg',
-#     "ElevationStart": '0deg',
-#     "ElevationStop": '180deg',
-#     "ElevationStep": '10deg',
-#     "AzimuthStart": '0deg',
-#     "AzimuthStop": '180deg',
-#     "AzimuthStep": '10deg',
-#     "UseLocalCS": False,
-#     "CoordSystem": ''
-# }
-# infinite_sphere_far_field.props.update(far_field_infinite_sphere_params_ext)
-# for field_setup in hfss.field_setups:
-#     field_setup.azimuth_start = -180
-#     field_setup.azimuth_stop = 180
-#     field_setup.azimuth_step = 2
-solver_setup = hfss.create_setup(setupname="MTS_Setup", setuptype="HFSSDriven")
-solver_setup_params = {"SolveType": 'Single',
-                       # ('MultipleAdaptiveFreqsSetup',
-                       #  SetupProps([('1GHz', [0.02]),
-                       #              ('2GHz', [0.02]),
-                       #              ('5GHz', [0.02])])),
-                       "Frequency": '17GHz',
-                       "MaxDeltaS": 0.02,
-                       "PortsOnly": False,
-                       "UseMatrixConv": False,
-                       "MaximumPasses": 20,
-                       "MinimumPasses": 1,
-                       "MinimumConvergedPasses": 1,
-                       "PercentRefinement": 30,
-                       "IsEnabled": True,
-                       # ('MeshLink', SetupProps([('ImportMesh', False)])),
-                       "BasisOrder": 1,
-                       "DoLambdaRefine": True,
-                       "DoMaterialLambda": True,
-                       "SetLambdaTarget": False,
-                       "Target": 0.3333,
-                       "UseMaxTetIncrease": False,
-                       "PortAccuracy": 2,
-                       "UseABCOnPort": False,
-                       "SetPortMinMaxTri": False,
-                       "UseDomains": False,
-                       "UseIterativeSolver": False,
-                       "SaveRadFieldsOnly": False,
-                       "SaveAnyFields": True,
-                       "IESolverType": "Auto",
-                       "LambdaTargetForIESolver": 0.15,
-                       "UseDefaultLambdaTgtForIESolver": True,
-                       "IE Solver Accuracy": 'Balanced'
-                       }
-solver_setup.props.update(solver_setup_params)
-
-frequency_sweep_params = {
-    "unit": "GHz",
-    "freqstart": 15,
-    "freqstop": 22,
-    "num_of_freq_points": 401,
-    "sweepname": "sweep",
-    "save_fields": True,
-    "save_rad_fields": False,
-    "sweep_type": "Interpolating",
-    "interpolation_tol": 0.5,
-    "interpolation_max_solutions": 250
-}
-solver_setup.create_frequency_sweep(**frequency_sweep_params)
-
-setup_ok = hfss.validate_full_design()
-hfss.analyze_setup("MTS_Setup")
-# hfss.submit_job(clustername="localhost",
-#                 aedt_full_exe_path="/opt/AnsysEM/v231/Linux64/ansysedt.exe",
-#                 wait_for_license=True,
-#                 setting_file=None)
-
-# plt.savefig(save_filename_no_extension + "_plots" + ".png")
-# with open(save_filename_numpy, 'wb') as f:
-#     np.save(f, database)
 
 time_end = datetime.now()
 time_difference = time_end - time_start
