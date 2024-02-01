@@ -440,12 +440,13 @@ for x_pos in unit_cell_x_positions:
             unit_cell_list.append(unit_cell_0_geom)
             unit_cell_name_list.append(unit_cell_0_geom.name)
             unit_cell_index = unit_cell_index + 1
-            subtract_params = {
-                "blank_list": [target_geometry.name],
-                "tool_list": unit_cell_0_geom.name,
-                "keep_originals": False
-            }
-            hfss.modeler.subtract(**subtract_params)
+
+subtract_params = {
+    "blank_list": [target_geometry.name],
+    "tool_list": unit_cell_name_list,
+    "keep_originals": False
+}
+hfss.modeler.subtract(**subtract_params)
 
 slot_1_size_x = w3
 slot_1_size_y = l3
@@ -541,6 +542,18 @@ port_1_params = {"name": "port_1",
 port_1_geom = hfss.modeler.create_rectangle(**port_1_params)
 port_1_geom.color = radiation_box_color
 
+port_1_excitation_params = {"signal": port_1_geom,
+                            "reference": ground_plane_geom,
+                            "create_port_sheet": False,
+                            "port_on_plane": True,
+                            "integration_line": 0,
+                            "impedance": 50,
+                            "name": "port_1_excitation",
+                            "renormalize": True,
+                            "deembed": False,
+                            "terminals_rename": True}
+hfss.lumped_port(**port_1_excitation_params)
+
 port_2_position = np.array([0.5 * antenna_length_mm,
                             -0.5 * feed_rect_width_mm,
                             -0.5 * height_mm])
@@ -557,11 +570,23 @@ port_2_params = {"name": "port_2",
 port_2_geom = hfss.modeler.create_rectangle(**port_2_params)
 port_2_geom.color = radiation_box_color
 
+port_2_excitation_params = {"signal": port_2_geom,
+                            "reference": ground_plane_geom,
+                            "create_port_sheet": False,
+                            "port_on_plane": True,
+                            "integration_line": 0,
+                            "impedance": 50,
+                            "name": "port_2_excitation",
+                            "renormalize": True,
+                            "deembed": False,
+                            "terminals_rename": True}
+hfss.lumped_port(**port_2_excitation_params)
+
 module = hfss.get_module("ModelSetup")
-module.CreateOpenRegion(
+open_region = module.CreateOpenRegion(
     [
         "NAME:Settings",
-        "OpFreq:=", "19GHz",
+        "OpFreq:=", "19.6GHz",
         "Boundary:=", "Radiation",
         "ApplyInfiniteGP:=", False
     ])
@@ -596,7 +621,7 @@ solver_setup_params = {"SolveType": 'Single',
                        #  SetupProps([('1GHz', [0.02]),
                        #              ('2GHz', [0.02]),
                        #              ('5GHz', [0.02])])),
-                       "Frequency": '19GHz',
+                       "Frequency": '19.6GHz',
                        "MaxDeltaS": 0.03,
                        "PortsOnly": False,
                        "UseMatrixConv": False,
@@ -634,7 +659,7 @@ frequency_sweep_params = {
     "sweepname": "sweep",
     "save_fields": True,
     "save_rad_fields": False,
-    "sweep_type": "Interpolating",
+    "sweep_type": "Discrete",
     "interpolation_tol": 0.5,
     "interpolation_max_solutions": 250
 }
