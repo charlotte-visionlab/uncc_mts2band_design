@@ -46,14 +46,8 @@ height_mm = 0.787  # mm   <=== dielectric slab height in millimeters
 # height = 2.54e-3  # m
 fill_pct = 0.5 * np.array([1.0, 1.0])
 
-path = "mts_databases/"
-filename_prefix = "mts_dispersion_database"
-datetime_str = "Dec16_07-57-12"
 machine = "ece-emag1"
-load_filename_matlab = path + filename_prefix + "_" + datetime_str + "_" + machine
-# unit_cell_database = scipy.io.loadmat(load_filename_matlab)
-# eigen_modes = unit_cell_database["database"][0][0]["mode_solutions"]
-#
+frequency_GHz = 19.2
 
 # DIELECTRIC MATERIALS
 dielectric_material_name = "Rogers RT/duroid 5880 (tm)"
@@ -66,20 +60,21 @@ unit_cell_material_name = "pec"
 radiation_box_material_name = "air"
 
 # VISUALIZATION PREFERENCES
-metal_color = [143, 175, 143]
-dielectric_color = [255, 255, 128]
-radiation_box_color = [128, 255, 255]
-perfectly_matched_layer_color = [255, 128, 128]
-
+metal_color = [143, 175, 143]  # green
+dielectric_color = [255, 255, 128]  # yellow
+radiation_box_color = [128, 255, 255]  # neon blue
+subtract_tool_color = [64, 64, 64]  # dary gray
+perfectly_matched_layer_color = [255, 128, 128]  # light red
+port_color = [31, 81, 255]  # blue
 d0 = 8  # mm
-t0 = 3  # mm
+t0 = 1  # mm past 3mm
 L1 = 50  # mm
 W = 22  # mm
 t1 = 6  # mm
 d1 = 4  # mm
 wr = 13  # mm
 t2 = 5  # mm
-d2 = 2.5  # mm
+d2 = 5.5  # mm past 2.5mm
 wh = 13  # mm
 L2 = 200  # mm
 m = 9.4  # mm
@@ -379,9 +374,6 @@ inner_position_list[-1] += np.abs(0.5 * gap_size / edge_vector_last[1]) * edge_v
 unit_cell_position_list = outer_position_list + inner_position_list[::-1]
 unit_cell_coordinates_zero_centered = np.array(unit_cell_position_list)
 
-unit_cell_name_list = []
-unit_cell_list = []
-
 
 def transform_xy_coords(coords, translation, xy_rotation):
     rigid_transform = np.array([[np.cos(xy_rotation), -np.sin(xy_rotation), 0.0, 0.0],
@@ -404,6 +396,10 @@ num_unit_cells_x = unit_cell_x_positions.size
 translation = np.array([0.0, 0.0, 0.0])
 rotation = 0.0
 unit_cell_index = 0
+ground_plane_line_blank_cell_name_list = []
+transmission_line_blank_cell_name_list = []
+unit_cell_list = []
+
 for x_pos in unit_cell_x_positions:
     translation[0] = x_pos
     for index_y, y_pos in enumerate(unit_cell_y_positions):
@@ -431,19 +427,25 @@ for x_pos in unit_cell_x_positions:
                 "non_model": False
             }
             unit_cell_0_geom = hfss.modeler.create_polyline(**unit_cell_polyline_params)
-            unit_cell_0_geom.color = radiation_box_color
+            unit_cell_0_geom.color = subtract_tool_color
             unit_cell_0_geom.transparency = 0
-            # hfss.assign_perfecte_to_sheets(
-            #     **{"sheet_list": [unit_cell_0.name],
-            #        "sourcename": None,
-            #        "is_infinite_gnd": False})
             unit_cell_list.append(unit_cell_0_geom)
-            unit_cell_name_list.append(unit_cell_0_geom.name)
+            if target_geometry == ground_plane_geom:
+                ground_plane_line_blank_cell_name_list.append(unit_cell_0_geom.name)
+            if target_geometry == transmission_line_plane_geom:
+                transmission_line_blank_cell_name_list.append(unit_cell_0_geom.name)
             unit_cell_index = unit_cell_index + 1
 
 subtract_params = {
-    "blank_list": [target_geometry.name],
-    "tool_list": unit_cell_name_list,
+    "blank_list": [ground_plane_geom.name],
+    "tool_list": ground_plane_line_blank_cell_name_list,
+    "keep_originals": False
+}
+hfss.modeler.subtract(**subtract_params)
+
+subtract_params = {
+    "blank_list": [transmission_line_plane_geom.name],
+    "tool_list": transmission_line_blank_cell_name_list,
     "keep_originals": False
 }
 hfss.modeler.subtract(**subtract_params)
@@ -484,7 +486,7 @@ for triplet_index in np.arange(0, num_slot_triplets):
                      "matname": ground_plane_material_name,
                      "is_covered": True}
     slot_1_geom = hfss.modeler.create_rectangle(**slot_1_params)
-    slot_1_geom.color = radiation_box_color
+    slot_1_geom.color = subtract_tool_color
     slot_geometries.append(slot_1_geom)
 
     slot_2_position = np.array([slot_2_x_positions[triplet_index],
@@ -500,7 +502,7 @@ for triplet_index in np.arange(0, num_slot_triplets):
                      "matname": ground_plane_material_name,
                      "is_covered": True}
     slot_2_geom = hfss.modeler.create_rectangle(**slot_2_params)
-    slot_2_geom.color = radiation_box_color
+    slot_2_geom.color = subtract_tool_color
     slot_geometries.append(slot_2_geom)
 
     slot_3_position = np.array([slot_3_x_positions[triplet_index],
@@ -516,7 +518,7 @@ for triplet_index in np.arange(0, num_slot_triplets):
                      "matname": ground_plane_material_name,
                      "is_covered": True}
     slot_3_geom = hfss.modeler.create_rectangle(**slot_3_params)
-    slot_3_geom.color = radiation_box_color
+    slot_3_geom.color = subtract_tool_color
     slot_geometries.append(slot_3_geom)
 
     subtract_params = {
@@ -584,7 +586,7 @@ hfss.lumped_port(**port_2_excitation_params)
 
 module = hfss.get_module("ModelSetup")
 open_region_params = {
-    "Frequency": "19.6GHz",
+    "Frequency": "{}GHz".format(frequency_GHz),
     "Boundary": "Radiation",
     "ApplyInfiniteGP": False,
     "GPAXis": "-z"}
@@ -612,7 +614,7 @@ solver_setup_params = {"SolveType": 'Single',
                        #  SetupProps([('1GHz', [0.02]),
                        #              ('2GHz', [0.02]),
                        #              ('5GHz', [0.02])])),
-                       "Frequency": '19.6GHz',
+                       "Frequency": '{}GHz'.format(frequency_GHz),
                        "MaxDeltaS": 0.03,
                        "PortsOnly": False,
                        "UseMatrixConv": False,
@@ -642,19 +644,19 @@ solver_setup_params = {"SolveType": 'Single',
                        }
 solver_setup.props.update(solver_setup_params)
 
-frequency_sweep_params = {
-    "unit": "GHz",
-    "freqstart": 18,
-    "freqstop": 20,
-    "num_of_freq_points": 100,
-    "sweepname": "sweep",
-    "save_fields": True,
-    "save_rad_fields": False,
-    "sweep_type": "Discrete",
-    "interpolation_tol": 0.5,
-    "interpolation_max_solutions": 250
-}
-solver_setup.create_frequency_sweep(**frequency_sweep_params)
+# frequency_sweep_params = {
+#     "unit": "GHz",
+#     "freqstart": frequency_GHz - 1.5,
+#     "freqstop": frequency_GHz + 1.5,
+#     "num_of_freq_points": 200,
+#     "sweepname": "sweep",
+#     "save_fields": True,
+#     "save_rad_fields": False,
+#     "sweep_type": "Discrete",
+#     "interpolation_tol": 0.5,
+#     "interpolation_max_solutions": 250
+# }
+# solver_setup.create_frequency_sweep(**frequency_sweep_params)
 
 setup_ok = hfss.validate_full_design()
 
