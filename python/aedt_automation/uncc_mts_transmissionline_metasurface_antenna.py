@@ -591,41 +591,18 @@ open_region_params = {
 success = hfss.create_open_region(**open_region_params)
 
 hfss.modeler.set_working_coordinate_system("Global")
-# oEditor = hfss.odesign.SetActiveEditor("3D Modeler")
-# oEditor.ChangeProperty(
-#     [
-#         "NAME:AllTabs",
-#         [
-#             "NAME:Geometry3DCmdTab",
-#             [
-#                 "NAME:PropServers",
-#                 "RadiatingSurface:CreateRegion:1"
-#             ],
-#             [
-#                 "NAME:ChangedProps",
-#                 [
-#                     "NAME:+X Padding Data",
-#                     "Value:=", "0mm"
-#                 ],
-#                 [
-#                     "NAME:-X Padding Data",
-#                     "Value:=", "0mm"
-#                 ]
-#             ]
-#         ]
-#     ])
 
-analysis_plane_position = ground_plane_position
+analysis_plane_position = np.array([ground_plane_position[0], ground_plane_position[1], 0])
 analysis_plane_size = ground_plane_size
 analysis_plane_params = {"name": "plot_waveguide_mode",
-                 "csPlane": "YZ",
-                 "position": "{}mm,{}mm,{}mm".format(analysis_plane_position[0],
-                                                     analysis_plane_position[1],
-                                                     analysis_plane_position[2]).split(","),
-                 "dimension_list": "{}mm,{}mm".format(analysis_plane_size[0],
-                                                      analysis_plane_size[1]).split(","),
-                 "matname": None,
-                 "is_covered": True}
+                         "csPlane": "XY",
+                         "position": "{}mm,{}mm,{}mm".format(analysis_plane_position[0],
+                                                             analysis_plane_position[1],
+                                                             analysis_plane_position[2]).split(","),
+                         "dimension_list": "{}mm,{}mm".format(analysis_plane_size[0],
+                                                              analysis_plane_size[1]).split(","),
+                         "matname": None,
+                         "is_covered": True}
 analysis_plane_geom = hfss.modeler.create_rectangle(**analysis_plane_params)
 analysis_plane_geom.color = radiation_box_color
 
@@ -639,7 +616,7 @@ solver_setup_params = {"SolveType": 'Single',
                        "MaxDeltaS": 0.03,
                        "PortsOnly": False,
                        "UseMatrixConv": False,
-                       "MaximumPasses": 20,
+                       "MaximumPasses": 30,
                        "MinimumPasses": 1,
                        "MinimumConvergedPasses": 1,
                        "PercentRefinement": 30,
@@ -669,7 +646,7 @@ frequency_sweep_params = {
     "unit": "GHz",
     "freqstart": 18,
     "freqstop": 20,
-    "num_of_freq_points": 10,
+    "num_of_freq_points": 100,
     "sweepname": "sweep",
     "save_fields": True,
     "save_rad_fields": False,
