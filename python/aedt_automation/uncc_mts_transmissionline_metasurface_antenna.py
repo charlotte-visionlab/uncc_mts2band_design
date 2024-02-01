@@ -41,7 +41,8 @@ speed_of_light = 2.99792458e8
 frequency = 10e9
 wavelength = speed_of_light / frequency
 
-height_mm = 1.57  # mm   <=== dielectric slab height in centimeters
+# height_mm = 1.57  # mm   <=== dielectric slab height in millimeters
+height_mm = 0.787  # mm   <=== dielectric slab height in millimeters
 # height = 2.54e-3  # m
 fill_pct = 0.5 * np.array([1.0, 1.0])
 
@@ -282,11 +283,12 @@ trap_polyline_params = {
 }
 feed_trap_geom_0 = hfss.modeler.create_polyline(**trap_polyline_params)
 feed_trap_geom_0.color = metal_color
+feed_trap_geom_0.transparency = 0
 
 port_index = 1
 #  build a feed structure having feed_length_cm length along the Y axis (the propagation axis)
 feed_rect_position = np.array([0.5 * antenna_length_mm - feed_rect_length_mm,
-                               0.5 * feed_rect_width_mm - 0.5 * feed_rect_width_mm,
+                               - 0.5 * feed_rect_width_mm,
                                0.5 * height_mm])
 feed_rect_size = np.array([feed_rect_length_mm, feed_rect_width_mm])
 feed_rect_params = {"name": "feed_rectanglar_portion_" + str(port_index),
@@ -306,10 +308,10 @@ trap_position_list = np.array([np.array([feed_rect_position[0],
                                np.array([feed_rect_position[0],
                                          feed_rect_position[1] + trapezoid_top_width, feed_rect_position[2]]),
                                np.array([feed_rect_position[0] - trapezoid_length_mm,
-                                         0.5 * trapezoid_bottom_width + 0.5 * feed_rect_width_mm,
+                                         0.5 * trapezoid_bottom_width,
                                          feed_rect_position[2]]),
                                np.array([feed_rect_position[0] - trapezoid_length_mm,
-                                         -0.5 * trapezoid_bottom_width + 0.5 * feed_rect_width_mm,
+                                         -0.5 * trapezoid_bottom_width,
                                          feed_rect_position[2]])])
 trap_position_list = [elem.tolist() for elem in trap_position_list]
 trap_polyline_params = {
@@ -330,6 +332,7 @@ trap_polyline_params = {
 }
 feed_trap_geom_1 = hfss.modeler.create_polyline(**trap_polyline_params)
 feed_trap_geom_1.color = metal_color
+feed_trap_geom_1.transparency = 0
 
 hfss.assign_perfecte_to_sheets(
     **{"sheet_list": [ground_plane_geom.name,
@@ -339,15 +342,16 @@ hfss.assign_perfecte_to_sheets(
        "sourcename": None,
        "is_infinite_gnd": False})
 
-l1 = 1.58
-unit_cell_length = 2 * l1
+a = 2.5  # mm
+l1 = 1.58  # mm
+unit_cell_size = a
 thickness = 0.2
 gap_size = 0.16
 num_vertices = 4  # THIS MUST BE EVEN
 delta_angle_deg = 360 / num_vertices
-angle_list = np.arange(0, 361, delta_angle_deg) - 180
-outer_radius = l1
-inner_radius = l1 - thickness
+angle_list = np.linspace(-180, +180, num_vertices + 1, endpoint=True)
+outer_radius = l1 / np.sqrt(2)
+inner_radius = (l1 - thickness) / np.sqrt(2)
 outer_position_list = []
 inner_position_list = []
 for angle in angle_list:
@@ -373,59 +377,284 @@ edge_vector_last *= 1 / np.linalg.norm(edge_vector_last)
 inner_position_list[-1] += np.abs(0.5 * gap_size / edge_vector_last[1]) * edge_vector_last
 
 unit_cell_position_list = outer_position_list + inner_position_list[::-1]
-for pt in unit_cell_position_list:
-    pt[2] = 10 #0.5 * height_mm
-
-# unit_cell_position_list_rot = unit_cell_position_list.copy()
-# for i in range(len(unit_cell_position_list)):
-#     unit_cell_position_list_rot[i][0] = (unit_cell_position_list[i][0] * np.cos(np.pi/2)) - (unit_cell_position_list[i][1] * np.sin(np.pi/2))
-#     unit_cell_position_list_rot[i][1] = (unit_cell_position_list[i][0] * np.sin(np.pi/2)) + (unit_cell_position_list[i][1] * np.cos(np.pi/2))
+unit_cell_coordinates_zero_centered = np.array(unit_cell_position_list)
 
 unit_cell_name_list = []
 unit_cell_list = []
 
-# ===LOOP==
-index = 0
-init_pos = np.array([-0.5*L2, -0.5*(wr-unit_cell_length), 0])
-unit_cell_position_list[:] = unit_cell_position_list[:] + init_pos  # shift to top-left corner
-offset = np.arange(0, L2 - 0.5*unit_cell_length, unit_cell_length)
-unit_cell_position_list_new = []
-for of in offset:
-    unit_cell_position_list_new[:] = unit_cell_position_list[:] + np.asarray([of, 0, 0])    # offset to the right
-    unit_cell_polyline_params = {
-        "position_list": unit_cell_position_list_new,
-        "segment_type": None,
-        "cover_surface": True,
-        "close_surface": True,
-        "name": "unit_cell_" + str(index),
-        "matname": None,
-        "xsection_type": None,
-        "xsection_orient": None,
-        "xsection_width": 1,
-        "xsection_topwidth": 1,
-        "xsection_height": 1,
-        "xsection_num_seg": 0,
-        "xsection_bend_type": None,
-        "non_model": False
+
+def transform_xy_coords(coords, translation, xy_rotation):
+    rigid_transform = np.array([[np.cos(xy_rotation), -np.sin(xy_rotation), 0.0, 0.0],
+                                [np.sin(xy_rotation), np.cos(xy_rotation), 0.0, 0.0],
+                                [0.0, 0.0, 1.0, 0.0],
+                                [0.0, 0.0, 0.0, 1.0]])
+    transformed_coordinates = rigid_transform @ np.hstack((coords, np.ones((coords.shape[0], 1)))).T
+    return transformed_coordinates[0:3, :].T + np.tile(translation, (transformed_coordinates.shape[1], 1))
+
+
+#
+# Create the metasurface SIW unit cells on the ground plane and the transmission line surfaces
+#
+unit_cell_x_positions = -0.5 * L2 + np.arange(0.5 * unit_cell_size, L2, unit_cell_size)
+unit_cell_y_positions = np.linspace(-0.5 * wr, +0.5 * wr, 2, endpoint=True)
+unit_cell_xy_orientation = np.linspace(-90, 90, 2, endpoint=True)
+unit_cell_z_positions = np.linspace(-0.5 * height_mm, +0.5 * height_mm, 2, endpoint=True)
+subtraction_sheet = (ground_plane_geom, transmission_line_plane_geom)
+num_unit_cells_x = unit_cell_x_positions.size
+translation = np.array([0.0, 0.0, 0.0])
+rotation = 0.0
+unit_cell_index = 0
+for x_pos in unit_cell_x_positions:
+    translation[0] = x_pos
+    for index_y, y_pos in enumerate(unit_cell_y_positions):
+        translation[1] = y_pos
+        xy_rotation = unit_cell_xy_orientation[index_y] * np.pi / 180.0
+        for (geom_index, z_pos) in enumerate(unit_cell_z_positions):
+            translation[2] = z_pos
+            target_geometry = subtraction_sheet[geom_index]
+            transformed_coordinates = transform_xy_coords(unit_cell_coordinates_zero_centered, translation, xy_rotation)
+            unit_cell_transformed_coordinate_list = [elem.tolist() for elem in transformed_coordinates]
+            unit_cell_polyline_params = {
+                "position_list": unit_cell_transformed_coordinate_list,
+                "segment_type": None,
+                "cover_surface": True,
+                "close_surface": True,
+                "name": "unit_cell_" + str(unit_cell_index),
+                "matname": None,
+                "xsection_type": None,
+                "xsection_orient": None,
+                "xsection_width": 1,
+                "xsection_topwidth": 1,
+                "xsection_height": 1,
+                "xsection_num_seg": 0,
+                "xsection_bend_type": None,
+                "non_model": False
+            }
+            unit_cell_0_geom = hfss.modeler.create_polyline(**unit_cell_polyline_params)
+            unit_cell_0_geom.color = radiation_box_color
+            unit_cell_0_geom.transparency = 0
+            # hfss.assign_perfecte_to_sheets(
+            #     **{"sheet_list": [unit_cell_0.name],
+            #        "sourcename": None,
+            #        "is_infinite_gnd": False})
+            unit_cell_list.append(unit_cell_0_geom)
+            unit_cell_name_list.append(unit_cell_0_geom.name)
+            unit_cell_index = unit_cell_index + 1
+            subtract_params = {
+                "blank_list": [target_geometry.name],
+                "tool_list": unit_cell_0_geom.name,
+                "keep_originals": False
+            }
+            hfss.modeler.subtract(**subtract_params)
+
+slot_1_size_x = w3
+slot_1_size_y = l3
+slot_2_size_x = w3
+slot_2_size_y = l4
+slot_3_size_x = w3
+slot_3_size_y = l5
+adjacent_slot_spacing = s1
+first_offset = m
+interval_x = p
+
+slot_1_x_positions = -0.5 * L2 + np.arange(first_offset, L2, p)
+num_slot_triplets = slot_1_x_positions.size
+slot_2_x_positions = slot_1_x_positions + slot_1_size_x + adjacent_slot_spacing
+slot_3_x_positions = slot_2_x_positions + slot_2_size_x + adjacent_slot_spacing
+slot_1_y_positions = [-0.5 * slot_1_size_y] * num_slot_triplets
+slot_2_y_positions = [-0.5 * slot_2_size_y] * num_slot_triplets
+slot_3_y_positions = [-0.5 * slot_3_size_y] * num_slot_triplets
+slot_1_size = np.array([slot_1_size_x, slot_1_size_y])
+slot_2_size = np.array([slot_2_size_x, slot_2_size_y])
+slot_3_size = np.array([slot_3_size_x, slot_3_size_y])
+
+slot_geometries = []
+for triplet_index in np.arange(0, num_slot_triplets):
+    slot_1_position = np.array([slot_1_x_positions[triplet_index],
+                                slot_1_y_positions[triplet_index],
+                                0.5 * height_mm])
+    slot_1_params = {"name": "slot_1_" + str(triplet_index),
+                     "csPlane": "XY",
+                     "position": "{}mm,{}mm,{}mm".format(slot_1_position[0],
+                                                         slot_1_position[1],
+                                                         slot_1_position[2]).split(","),
+                     "dimension_list": "{}mm,{}mm".format(slot_1_size[0],
+                                                          slot_1_size[1]).split(","),
+                     "matname": ground_plane_material_name,
+                     "is_covered": True}
+    slot_1_geom = hfss.modeler.create_rectangle(**slot_1_params)
+    slot_1_geom.color = radiation_box_color
+    slot_geometries.append(slot_1_geom)
+
+    slot_2_position = np.array([slot_2_x_positions[triplet_index],
+                                slot_2_y_positions[triplet_index],
+                                0.5 * height_mm])
+    slot_2_params = {"name": "slot_2_" + str(triplet_index),
+                     "csPlane": "XY",
+                     "position": "{}mm,{}mm,{}mm".format(slot_2_position[0],
+                                                         slot_2_position[1],
+                                                         slot_2_position[2]).split(","),
+                     "dimension_list": "{}mm,{}mm".format(slot_2_size[0],
+                                                          slot_2_size[1]).split(","),
+                     "matname": ground_plane_material_name,
+                     "is_covered": True}
+    slot_2_geom = hfss.modeler.create_rectangle(**slot_2_params)
+    slot_2_geom.color = radiation_box_color
+    slot_geometries.append(slot_2_geom)
+
+    slot_3_position = np.array([slot_3_x_positions[triplet_index],
+                                slot_3_y_positions[triplet_index],
+                                0.5 * height_mm])
+    slot_3_params = {"name": "slot_3_" + str(triplet_index),
+                     "csPlane": "XY",
+                     "position": "{}mm,{}mm,{}mm".format(slot_3_position[0],
+                                                         slot_3_position[1],
+                                                         slot_3_position[2]).split(","),
+                     "dimension_list": "{}mm,{}mm".format(slot_3_size[0],
+                                                          slot_3_size[1]).split(","),
+                     "matname": ground_plane_material_name,
+                     "is_covered": True}
+    slot_3_geom = hfss.modeler.create_rectangle(**slot_3_params)
+    slot_3_geom.color = radiation_box_color
+    slot_geometries.append(slot_3_geom)
+
+    subtract_params = {
+        "blank_list": [transmission_line_plane_geom.name],
+        "tool_list": [slot_1_geom.name, slot_2_geom.name, slot_3_geom.name],
+        "keep_originals": False
     }
-    unit_cell_0 = hfss.modeler.create_polyline(**unit_cell_polyline_params)
-    unit_cell_0.color = metal_color
-    # hfss.assign_perfecte_to_sheets(
-    #     **{"sheet_list": [unit_cell_0.name],
-    #        "sourcename": None,
-    #        "is_infinite_gnd": False})
-    unit_cell_list.append(unit_cell_0)
-    unit_cell_name_list.append(unit_cell_0.name)
-    index = index + 1
+    hfss.modeler.subtract(**subtract_params)
 
-# ===LOOP==
+port_1_position = np.array([-0.5 * antenna_length_mm,
+                            -0.5 * feed_rect_width_mm,
+                            -0.5 * height_mm])
+port_1_size = np.array([feed_rect_width_mm, height_mm])
+port_1_params = {"name": "port_1",
+                 "csPlane": "YZ",
+                 "position": "{}mm,{}mm,{}mm".format(port_1_position[0],
+                                                     port_1_position[1],
+                                                     port_1_position[2]).split(","),
+                 "dimension_list": "{}mm,{}mm".format(port_1_size[0],
+                                                      port_1_size[1]).split(","),
+                 "matname": None,
+                 "is_covered": True}
+port_1_geom = hfss.modeler.create_rectangle(**port_1_params)
+port_1_geom.color = radiation_box_color
 
-subtract_params = {
-    "blank_list": [transmission_line_plane_geom.name],
-    "tool_list": unit_cell_name_list,
-    "keep_originals": True
+port_2_position = np.array([0.5 * antenna_length_mm,
+                            -0.5 * feed_rect_width_mm,
+                            -0.5 * height_mm])
+port_2_size = port_1_size
+port_2_params = {"name": "port_2",
+                 "csPlane": "YZ",
+                 "position": "{}mm,{}mm,{}mm".format(port_2_position[0],
+                                                     port_2_position[1],
+                                                     port_2_position[2]).split(","),
+                 "dimension_list": "{}mm,{}mm".format(port_2_size[0],
+                                                      port_2_size[1]).split(","),
+                 "matname": None,
+                 "is_covered": True}
+port_2_geom = hfss.modeler.create_rectangle(**port_2_params)
+port_2_geom.color = radiation_box_color
+
+module = hfss.get_module("ModelSetup")
+module.CreateOpenRegion(
+    [
+        "NAME:Settings",
+        "OpFreq:=", "19GHz",
+        "Boundary:=", "Radiation",
+        "ApplyInfiniteGP:=", False
+    ])
+hfss.modeler.set_working_coordinate_system("Global")
+# oEditor = hfss.odesign.SetActiveEditor("3D Modeler")
+# oEditor.ChangeProperty(
+#     [
+#         "NAME:AllTabs",
+#         [
+#             "NAME:Geometry3DCmdTab",
+#             [
+#                 "NAME:PropServers",
+#                 "RadiatingSurface:CreateRegion:1"
+#             ],
+#             [
+#                 "NAME:ChangedProps",
+#                 [
+#                     "NAME:+X Padding Data",
+#                     "Value:=", "0mm"
+#                 ],
+#                 [
+#                     "NAME:-X Padding Data",
+#                     "Value:=", "0mm"
+#                 ]
+#             ]
+#         ]
+#     ])
+
+solver_setup = hfss.create_setup(setupname="MTS_SIWAntenna_Setup", setuptype="HFSSDriven")
+solver_setup_params = {"SolveType": 'Single',
+                       # ('MultipleAdaptiveFreqsSetup',
+                       #  SetupProps([('1GHz', [0.02]),
+                       #              ('2GHz', [0.02]),
+                       #              ('5GHz', [0.02])])),
+                       "Frequency": '19GHz',
+                       "MaxDeltaS": 0.03,
+                       "PortsOnly": False,
+                       "UseMatrixConv": False,
+                       "MaximumPasses": 20,
+                       "MinimumPasses": 1,
+                       "MinimumConvergedPasses": 1,
+                       "PercentRefinement": 30,
+                       "IsEnabled": True,
+                       # ('MeshLink', SetupProps([('ImportMesh', False)])),
+                       "BasisOrder": 1,
+                       "DoLambdaRefine": True,
+                       "DoMaterialLambda": True,
+                       "SetLambdaTarget": False,
+                       "Target": 0.3333,
+                       "UseMaxTetIncrease": False,
+                       "PortAccuracy": 2,
+                       "UseABCOnPort": False,
+                       "SetPortMinMaxTri": False,
+                       "UseDomains": False,
+                       "UseIterativeSolver": False,
+                       "SaveRadFieldsOnly": False,
+                       "SaveAnyFields": True,
+                       "IESolverType": "Auto",
+                       "LambdaTargetForIESolver": 0.15,
+                       "UseDefaultLambdaTgtForIESolver": True,
+                       "IE Solver Accuracy": 'Balanced'
+                       }
+solver_setup.props.update(solver_setup_params)
+
+frequency_sweep_params = {
+    "unit": "GHz",
+    "freqstart": 18,
+    "freqstop": 20,
+    "num_of_freq_points": 10,
+    "sweepname": "sweep",
+    "save_fields": True,
+    "save_rad_fields": False,
+    "sweep_type": "Interpolating",
+    "interpolation_tol": 0.5,
+    "interpolation_max_solutions": 250
 }
-hfss.modeler.subtract(**subtract_params)
+solver_setup.create_frequency_sweep(**frequency_sweep_params)
+
+setup_ok = hfss.validate_full_design()
+
+setup_solver_configuration_params = {
+    "name": "MTS_SIWAntenna_Setup",
+    "num_cores": solver_configuration["num_cores"],
+    "num_tasks": 1,
+    "num_gpu": solver_configuration["num_gpu"],
+    "acf_file": None,
+    "use_auto_settings": True,
+    "num_variations_to_distribute": None,
+    "allowed_distribution_types": None,
+    "revert_to_initial_mesh": False,
+    "blocking": True
+}
+hfss.analyze_setup(**setup_solver_configuration_params)
 
 time_end = datetime.now()
 time_difference = time_end - time_start
@@ -443,4 +672,4 @@ time_difference_str = str(time_difference)
 ###############################################################################
 # Close Ansys Electronics Desktop
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-hfss.release_desktop(close_projects=True, close_desktop=True)
+# hfss.release_desktop(close_projects=True, close_desktop=True)

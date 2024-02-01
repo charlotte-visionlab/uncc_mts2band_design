@@ -198,7 +198,7 @@ hfss.assign_perfecte_to_sheets(
        "sourcename": None,
        "is_infinite_gnd": False})
 
-# SMA Connector model has pin on +Y and and up as +Z
+# SMA Connector model has pin on +Y and up as +Z
 sma_input_position = cm2mm * np.array([-board_dimensions_xy_cm[0] / 2, 0, height_cm / 2])
 # add half the pin diameter to make sma pin lie on top of the dielectric slab surface
 sma_pin_height_cm = 0.036
