@@ -583,13 +583,13 @@ port_2_excitation_params = {"signal": port_2_geom,
 hfss.lumped_port(**port_2_excitation_params)
 
 module = hfss.get_module("ModelSetup")
-open_region = module.CreateOpenRegion(
-    [
-        "NAME:Settings",
-        "OpFreq:=", "19.6GHz",
-        "Boundary:=", "Radiation",
-        "ApplyInfiniteGP:=", False
-    ])
+open_region_params = {
+    "Frequency": "19.6GHz",
+    "Boundary": "Radiation",
+    "ApplyInfiniteGP": False,
+    "GPAXis": "-z"}
+success = hfss.create_open_region(**open_region_params)
+
 hfss.modeler.set_working_coordinate_system("Global")
 # oEditor = hfss.odesign.SetActiveEditor("3D Modeler")
 # oEditor.ChangeProperty(
@@ -614,6 +614,20 @@ hfss.modeler.set_working_coordinate_system("Global")
 #             ]
 #         ]
 #     ])
+
+analysis_plane_position = ground_plane_position
+analysis_plane_size = ground_plane_size
+analysis_plane_params = {"name": "plot_waveguide_mode",
+                 "csPlane": "YZ",
+                 "position": "{}mm,{}mm,{}mm".format(analysis_plane_position[0],
+                                                     analysis_plane_position[1],
+                                                     analysis_plane_position[2]).split(","),
+                 "dimension_list": "{}mm,{}mm".format(analysis_plane_size[0],
+                                                      analysis_plane_size[1]).split(","),
+                 "matname": None,
+                 "is_covered": True}
+analysis_plane_geom = hfss.modeler.create_rectangle(**analysis_plane_params)
+analysis_plane_geom.color = radiation_box_color
 
 solver_setup = hfss.create_setup(setupname="MTS_SIWAntenna_Setup", setuptype="HFSSDriven")
 solver_setup_params = {"SolveType": 'Single',
