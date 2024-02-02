@@ -46,8 +46,9 @@ height_mm = 0.787  # mm   <=== dielectric slab height in millimeters
 # height = 2.54e-3  # m
 fill_pct = 0.5 * np.array([1.0, 1.0])
 
-machine = "ece-emag1"
 frequency_GHz = 19.2
+# airbox_boundary_conditions = "Radiation"
+airbox_boundary_conditions = "pec"
 
 # DIELECTRIC MATERIALS
 dielectric_material_name = "Rogers RT/duroid 5880 (tm)"
@@ -584,13 +585,31 @@ port_2_excitation_params = {"signal": port_2_geom,
                             "terminals_rename": True}
 hfss.lumped_port(**port_2_excitation_params)
 
-module = hfss.get_module("ModelSetup")
-open_region_params = {
-    "Frequency": "{}GHz".format(frequency_GHz),
-    "Boundary": "Radiation",
-    "ApplyInfiniteGP": False,
-    "GPAXis": "-z"}
-success = hfss.create_open_region(**open_region_params)
+if airbox_boundary_conditions == "Radiation":
+    open_region_params = {
+        "Frequency": "{}GHz".format(frequency_GHz),
+        "Boundary": "Radiation",
+        "ApplyInfiniteGP": False,
+        "GPAXis": "-z"}
+    success = hfss.create_open_region(**open_region_params)
+
+if airbox_boundary_conditions == "pec":
+    padding = 10.4  # mm
+    pec_box_position = ground_plane_position - 0.5 * np.array([padding, padding, padding])
+    pec_box_size = padding + np.array([ground_plane_size[0],
+                                       ground_plane_size[1],
+                                       height_mm])
+    pec_box_params = {"name": "dielectric_slab",
+                      "position": "{}mm,{}mm,{}mm".format(pec_box_position[0],
+                                                          pec_box_position[1],
+                                                          pec_box_position[2]).split(","),
+                      "dimensions_list": "{}mm,{}mm,{}mm".format(pec_box_size[0],
+                                                                 pec_box_size[1],
+                                                                 pec_box_size[2]).split(","),
+                      "matname": "pec"}
+    pec_box_geom = hfss.modeler.create_box(**pec_box_params)
+    pec_box_geom.color = metal_color
+    pec_box_geom.transparency = 0.9
 
 hfss.modeler.set_working_coordinate_system("Global")
 
