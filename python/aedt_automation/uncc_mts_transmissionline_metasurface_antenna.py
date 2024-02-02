@@ -48,7 +48,7 @@ fill_pct = 0.5 * np.array([1.0, 1.0])
 
 frequency_GHz = 19.2
 
-enclose_antenna_with_pec_boundary = True
+enclose_antenna_with_pec_boundary = False
 
 # DIELECTRIC MATERIALS
 dielectric_material_name = "Rogers RT/duroid 5880 (tm)"
@@ -338,6 +338,116 @@ hfss.assign_perfecte_to_sheets(
        "sourcename": None,
        "is_infinite_gnd": False})
 
+# MAKE HOLES FOR THE RF 2.92 CONNECTOR BOLTS
+hole_positions_y = np.array([-4.75, 4.75])
+hole_positions_x = np.array([-0.5 * antenna_dimensions_xy_mm[0] + 2.5, 0.5 * antenna_dimensions_xy_mm[0] - 2.5])
+hole_position_z = -0.5 * height_mm
+hole_diameter_mm = 2.15  # mm
+hole_index = 0
+for hole_x_pos in hole_positions_x:
+    for hole_y_pos in hole_positions_y:
+        hole_params = {"name": "bolt_hole_" + str(hole_index),
+                   "cs_axis": "Z",
+                   "position": "{}mm,{}mm,{}mm".format(hole_x_pos,
+                                                       hole_y_pos,
+                                                       hole_position_z).split(","),
+                   "radius": "{}mm".format(hole_diameter_mm / 2),
+                   "height": "{}mm".format(dielectric_slab_size[2]),
+                   "numSides": 0,
+                   "matname": None}
+        hole_geom = hfss.modeler.create_cylinder(**hole_params)
+        hole_geom.color = radiation_box_color
+        subtract_params = {
+            "blank_list": [dielectric_slab_geom.name],
+            "tool_list": [hole_geom.name],
+            "keep_originals": False
+        }
+        hfss.modeler.subtract(**subtract_params)
+        hole_index += 1
+
+# RF292 Connector model has pin on +Y and up as +Z
+rf292_input_position = 0.5 * np.array([-antenna_dimensions_xy_mm[0], 0, height_mm])
+# add half the pin diameter to make sma pin lie on top of the dielectric slab surface
+# rf292_pin_height_mm = 0.25
+# rf292_input_position[2] += 0.5 * rf292_pin_height_mm
+rf292_input_x_direction = [0, -1, 0]
+rf292_input_y_direction = [1, 0, 0]
+rf292_input_connector_cs_params = {"origin": "{}mm,{}mm,{}mm".format(rf292_input_position[0],
+                                                                     rf292_input_position[1],
+                                                                     rf292_input_position[2]).split(","),
+                                   "reference_cs": "Global",
+                                   "name": "rf292_port_1_CS",
+                                   "mode": "axis",
+                                   "view": "iso",
+                                   "x_pointing": rf292_input_x_direction,
+                                   "y_pointing": rf292_input_y_direction,
+                                   "psi": 0,
+                                   "theta": 0,
+                                   "phi": 0,
+                                   "u": None
+                                   }
+rf292_input_cs = hfss.modeler.create_coordinate_system(**rf292_input_connector_cs_params)
+rf292_input_cs.set_as_working_cs()
+
+rf292_component_list = []
+port_index = 1
+rf292_component_params = {"comp_file": "components/Rosenberger_292_Connector_v3.a3dcomp",
+                        "geo_params": None,
+                        "sz_mat_params": "",
+                        "sz_design_params": "",
+                        "targetCS": "rf292_port_" + str(port_index) + "_CS",
+                        "name": "RF292_connector_" + str(port_index),
+                        "password": "",
+                        "auxiliary_dict": False
+                        }
+rf292_component = hfss.modeler.insert_3d_component(**rf292_component_params)
+rf292_component.parameters['subH'] = str(height_mm) + "mm"
+rf292_component.parameters['pinD'] = str(0.25) + "mm"
+rf292_component_list.append(rf292_component)
+
+# RF292 Connector model has pin on +Y and up as +Z
+rf292_output_position = 0.5 * np.array([antenna_dimensions_xy_mm[0], 0, height_mm])
+# add half the pin diameter to make sma pin lie on top of the dielectric slab surface
+# rf292_pin_height_mm = 0.25
+# rf292_output_position[2] += 0.5 * rf292_pin_height_mm
+rf292_output_x_direction = [0, 1, 0]
+rf292_output_y_direction = [-1, 0, 0]
+rf292_output_connector_cs_params = {"origin": "{}mm,{}mm,{}mm".format(rf292_output_position[0],
+                                                                     rf292_output_position[1],
+                                                                     rf292_output_position[2]).split(","),
+                                   "reference_cs": "Global",
+                                   "name": "rf292_port_2_CS",
+                                   "mode": "axis",
+                                   "view": "iso",
+                                   "x_pointing": rf292_output_x_direction,
+                                   "y_pointing": rf292_output_y_direction,
+                                   "psi": 0,
+                                   "theta": 0,
+                                   "phi": 0,
+                                   "u": None
+                                   }
+rf292_output_cs = hfss.modeler.create_coordinate_system(**rf292_output_connector_cs_params)
+rf292_output_cs.set_as_working_cs()
+
+hfss.modeler.set_working_coordinate_system("Global")
+
+port_index = 2
+rf292_component_params = {"comp_file": "components/Rosenberger_292_Connector_v3.a3dcomp",
+                        "geo_params": None,
+                        "sz_mat_params": "",
+                        "sz_design_params": "",
+                        "targetCS": "rf292_port_" + str(port_index) + "_CS",
+                        "name": "RF292_connector_" + str(port_index),
+                        "password": "",
+                        "auxiliary_dict": False
+                        }
+rf292_component = hfss.modeler.insert_3d_component(**rf292_component_params)
+rf292_component.parameters['subH'] = str(height_mm) + "mm"
+rf292_component.parameters['pinD'] = str(0.25) + "mm"
+rf292_component_list.append(rf292_component)
+
+hfss.modeler.set_working_coordinate_system("Global")
+
 a = 2.5  # mm
 l1 = 1.58  # mm
 unit_cell_size = a
@@ -529,63 +639,63 @@ for triplet_index in np.arange(0, num_slot_triplets):
     }
     hfss.modeler.subtract(**subtract_params)
 
-port_1_position = np.array([-0.5 * antenna_length_mm,
-                            -0.5 * feed_rect_width_mm,
-                            -0.5 * height_mm])
-port_1_size = np.array([feed_rect_width_mm, height_mm])
-port_1_params = {"name": "port_1",
-                 "csPlane": "YZ",
-                 "position": "{}mm,{}mm,{}mm".format(port_1_position[0],
-                                                     port_1_position[1],
-                                                     port_1_position[2]).split(","),
-                 "dimension_list": "{}mm,{}mm".format(port_1_size[0],
-                                                      port_1_size[1]).split(","),
-                 "matname": None,
-                 "is_covered": True}
-port_1_geom = hfss.modeler.create_rectangle(**port_1_params)
-port_1_geom.color = radiation_box_color
+# port_1_position = np.array([-0.5 * antenna_length_mm,
+#                             -0.5 * feed_rect_width_mm,
+#                             -0.5 * height_mm])
+# port_1_size = np.array([feed_rect_width_mm, height_mm])
+# port_1_params = {"name": "port_1",
+#                  "csPlane": "YZ",
+#                  "position": "{}mm,{}mm,{}mm".format(port_1_position[0],
+#                                                      port_1_position[1],
+#                                                      port_1_position[2]).split(","),
+#                  "dimension_list": "{}mm,{}mm".format(port_1_size[0],
+#                                                       port_1_size[1]).split(","),
+#                  "matname": None,
+#                  "is_covered": True}
+# port_1_geom = hfss.modeler.create_rectangle(**port_1_params)
+# port_1_geom.color = radiation_box_color
+#
+# port_1_excitation_params = {"signal": port_1_geom,
+#                             "reference": ground_plane_geom,
+#                             "create_port_sheet": False,
+#                             "port_on_plane": True,
+#                             "integration_line": 0,
+#                             "impedance": 50,
+#                             "name": "port_1_excitation",
+#                             "renormalize": True,
+#                             "deembed": False,
+#                             "terminals_rename": True}
+# hfss.lumped_port(**port_1_excitation_params)
+#
+# port_2_position = np.array([0.5 * antenna_length_mm,
+#                             -0.5 * feed_rect_width_mm,
+#                             -0.5 * height_mm])
+# port_2_size = port_1_size
+# port_2_params = {"name": "port_2",
+#                  "csPlane": "YZ",
+#                  "position": "{}mm,{}mm,{}mm".format(port_2_position[0],
+#                                                      port_2_position[1],
+#                                                      port_2_position[2]).split(","),
+#                  "dimension_list": "{}mm,{}mm".format(port_2_size[0],
+#                                                       port_2_size[1]).split(","),
+#                  "matname": None,
+#                  "is_covered": True}
+# port_2_geom = hfss.modeler.create_rectangle(**port_2_params)
+# port_2_geom.color = radiation_box_color
+#
+# port_2_excitation_params = {"signal": port_2_geom,
+#                             "reference": ground_plane_geom,
+#                             "create_port_sheet": False,
+#                             "port_on_plane": True,
+#                             "integration_line": 0,
+#                             "impedance": 50,
+#                             "name": "port_2_excitation",
+#                             "renormalize": True,
+#                             "deembed": False,
+#                             "terminals_rename": True}
+# hfss.lumped_port(**port_2_excitation_params)
 
-port_1_excitation_params = {"signal": port_1_geom,
-                            "reference": ground_plane_geom,
-                            "create_port_sheet": False,
-                            "port_on_plane": True,
-                            "integration_line": 0,
-                            "impedance": 50,
-                            "name": "port_1_excitation",
-                            "renormalize": True,
-                            "deembed": False,
-                            "terminals_rename": True}
-hfss.lumped_port(**port_1_excitation_params)
-
-port_2_position = np.array([0.5 * antenna_length_mm,
-                            -0.5 * feed_rect_width_mm,
-                            -0.5 * height_mm])
-port_2_size = port_1_size
-port_2_params = {"name": "port_2",
-                 "csPlane": "YZ",
-                 "position": "{}mm,{}mm,{}mm".format(port_2_position[0],
-                                                     port_2_position[1],
-                                                     port_2_position[2]).split(","),
-                 "dimension_list": "{}mm,{}mm".format(port_2_size[0],
-                                                      port_2_size[1]).split(","),
-                 "matname": None,
-                 "is_covered": True}
-port_2_geom = hfss.modeler.create_rectangle(**port_2_params)
-port_2_geom.color = radiation_box_color
-
-port_2_excitation_params = {"signal": port_2_geom,
-                            "reference": ground_plane_geom,
-                            "create_port_sheet": False,
-                            "port_on_plane": True,
-                            "integration_line": 0,
-                            "impedance": 50,
-                            "name": "port_2_excitation",
-                            "renormalize": True,
-                            "deembed": False,
-                            "terminals_rename": True}
-hfss.lumped_port(**port_2_excitation_params)
-
-if enclose_antenna_with_pec_boundary == True:
+if enclose_antenna_with_pec_boundary:
     padding = 10.4  # mm
     pec_box_position = ground_plane_position - 0.5 * np.array([padding, padding, padding])
     pec_box_size = padding + np.array([ground_plane_size[0],
@@ -610,7 +720,29 @@ open_region_params = {
     "GPAXis": "-z"}
 success = hfss.create_open_region(**open_region_params)
 
-hfss.modeler.set_working_coordinate_system("Global")
+oEditor = hfss.odesign.SetActiveEditor("3D Modeler")
+oEditor.ChangeProperty(
+    [
+        "NAME:AllTabs",
+        [
+            "NAME:Geometry3DCmdTab",
+            [
+                "NAME:PropServers",
+                "RadiatingSurface:CreateRegion:1"
+            ],
+            [
+                "NAME:ChangedProps",
+                [
+                    "NAME:+X Padding Data",
+                    "Value:=", "0mm"
+                ],
+                [
+                    "NAME:-X Padding Data",
+                    "Value:=", "0mm"
+                ]
+            ]
+        ]
+    ])
 
 analysis_plane_position = np.array([ground_plane_position[0], ground_plane_position[1], 0])
 analysis_plane_size = ground_plane_size
