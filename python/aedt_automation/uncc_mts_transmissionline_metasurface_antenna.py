@@ -644,19 +644,19 @@ solver_setup_params = {"SolveType": 'Single',
                        }
 solver_setup.props.update(solver_setup_params)
 
-# frequency_sweep_params = {
-#     "unit": "GHz",
-#     "freqstart": frequency_GHz - 1.5,
-#     "freqstop": frequency_GHz + 1.5,
-#     "num_of_freq_points": 200,
-#     "sweepname": "sweep",
-#     "save_fields": True,
-#     "save_rad_fields": False,
-#     "sweep_type": "Discrete",
-#     "interpolation_tol": 0.5,
-#     "interpolation_max_solutions": 250
-# }
-# solver_setup.create_frequency_sweep(**frequency_sweep_params)
+frequency_sweep_params = {
+    "unit": "GHz",
+    "freqstart": frequency_GHz - 1.5,
+    "freqstop": frequency_GHz + 1.5,
+    "num_of_freq_points": 200,
+    "sweepname": "sweep",
+    "save_fields": True,
+    "save_rad_fields": False,
+    "sweep_type": "Discrete",
+    "interpolation_tol": 0.5,
+    "interpolation_max_solutions": 250
+}
+solver_setup.create_frequency_sweep(**frequency_sweep_params)
 
 setup_ok = hfss.validate_full_design()
 
