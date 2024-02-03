@@ -483,8 +483,44 @@ edge_vector_last *= 1 / np.linalg.norm(edge_vector_last)
 inner_position_list[-1] += np.abs(0.5 * gap_size / edge_vector_last[1]) * edge_vector_last
 
 unit_cell_position_list = outer_position_list + inner_position_list[::-1]
-unit_cell_coordinates_zero_centered = np.array(unit_cell_position_list)
+square_unit_cell_coordinates_zero_centered = np.array(unit_cell_position_list)
 
+a = 2.5  # mm
+l2 = 1.2  # mm
+unit_cell_size = a
+thickness = 0.2
+gap_size = 0.5
+num_vertices = 6  # THIS MUST BE EVEN
+delta_angle_deg = 360 / num_vertices
+angle_list = np.linspace(-180, +180, num_vertices + 1, endpoint=True)
+outer_radius = l1 / np.sqrt(2)
+inner_radius = (l1 - thickness) / np.sqrt(2)
+outer_position_list = []
+inner_position_list = []
+for angle in angle_list:
+    x_outer = outer_radius * np.cos(angle * np.pi / 180)
+    y_outer = outer_radius * np.sin(angle * np.pi / 180)
+    x_inner = inner_radius * np.cos(angle * np.pi / 180)
+    y_inner = inner_radius * np.sin(angle * np.pi / 180)
+    outer_position_list.append(np.array([x_outer, y_outer, 0]))
+    inner_position_list.append(np.array([x_inner, y_inner, 0]))
+
+edge_vector_first = outer_position_list[1] - outer_position_list[0]
+edge_vector_first *= 1 / np.linalg.norm(edge_vector_first)
+outer_position_list[0] += np.abs(0.5 * gap_size / edge_vector_first[1]) * edge_vector_first
+edge_vector_last = outer_position_list[-2] - outer_position_list[-1]
+edge_vector_last *= 1 / np.linalg.norm(edge_vector_last)
+outer_position_list[-1] += np.abs(0.5 * gap_size / edge_vector_last[1]) * edge_vector_last
+
+edge_vector_first = inner_position_list[1] - inner_position_list[0]
+edge_vector_first *= 1 / np.linalg.norm(edge_vector_first)
+inner_position_list[0] += np.abs(0.5 * gap_size / edge_vector_first[1]) * edge_vector_first
+edge_vector_last = inner_position_list[-2] - inner_position_list[-1]
+edge_vector_last *= 1 / np.linalg.norm(edge_vector_last)
+inner_position_list[-1] += np.abs(0.5 * gap_size / edge_vector_last[1]) * edge_vector_last
+
+unit_cell_position_list = outer_position_list + inner_position_list[::-1]
+hexagon_unit_cell_coordinates_zero_centered = np.array(unit_cell_position_list)
 
 def transform_xy_coords(coords, translation, xy_rotation):
     rigid_transform = np.array([[np.cos(xy_rotation), -np.sin(xy_rotation), 0.0, 0.0],
@@ -499,8 +535,10 @@ def transform_xy_coords(coords, translation, xy_rotation):
 # Create the metasurface SIW unit cells on the ground plane and the transmission line surfaces
 #
 unit_cell_x_positions = -0.5 * L2 + np.arange(0.5 * unit_cell_size, L2, unit_cell_size)
-unit_cell_y_positions = np.linspace(-0.5 * wr, +0.5 * wr, 2, endpoint=True)
-unit_cell_xy_orientation = np.linspace(-90, 90, 2, endpoint=True)
+# unit_cell_y_positions = np.linspace(-0.5 * wr, +0.5 * wr, 2, endpoint=True)
+unit_cell_y_positions = np.array([-0.5 * wr - 2.5, +0.5 * wr + 2.5, -0.5 * wr, +0.5 * wr])
+# unit_cell_xy_orientation = np.linspace(-90, 90, 2, endpoint=True)
+unit_cell_xy_orientation = np.array([-90.0, 90.0, -90.0, 90.0])
 unit_cell_z_positions = np.linspace(-0.5 * height_mm, +0.5 * height_mm, 2, endpoint=True)
 subtraction_sheet = (ground_plane_geom, transmission_line_plane_geom)
 num_unit_cells_x = unit_cell_x_positions.size
@@ -519,7 +557,10 @@ for x_pos in unit_cell_x_positions:
         for (geom_index, z_pos) in enumerate(unit_cell_z_positions):
             translation[2] = z_pos
             target_geometry = subtraction_sheet[geom_index]
-            transformed_coordinates = transform_xy_coords(unit_cell_coordinates_zero_centered, translation, xy_rotation)
+            if index_y < 2:
+                transformed_coordinates = transform_xy_coords(hexagon_unit_cell_coordinates_zero_centered, translation, xy_rotation)
+            else:
+                transformed_coordinates = transform_xy_coords(square_unit_cell_coordinates_zero_centered, translation, xy_rotation)
             unit_cell_transformed_coordinate_list = [elem.tolist() for elem in transformed_coordinates]
             unit_cell_polyline_params = {
                 "position_list": unit_cell_transformed_coordinate_list,
