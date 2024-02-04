@@ -50,6 +50,7 @@ frequency_GHz = 19.6
 
 enclose_antenna_with_pec_boundary = True
 OMIT_MTS_UNIT_CELLS = False
+INSERT_HEXAGON_MTS_UNIT_CELLS = False
 
 # DIELECTRIC MATERIALS
 dielectric_material_name = "Rogers RT/duroid 5880 (tm)"
@@ -449,6 +450,7 @@ rf292_component_list.append(rf292_component)
 
 hfss.modeler.set_working_coordinate_system("Global")
 
+
 def transform_xy_coords(coords, translation, xy_rotation):
     rigid_transform = np.array([[np.cos(xy_rotation), -np.sin(xy_rotation), 0.0, 0.0],
                                 [np.sin(xy_rotation), np.cos(xy_rotation), 0.0, 0.0],
@@ -458,7 +460,7 @@ def transform_xy_coords(coords, translation, xy_rotation):
     return transformed_coordinates[0:3, :].T + np.tile(translation, (transformed_coordinates.shape[1], 1))
 
 
-def insert_unit_cells():
+def insert_unit_cells(insert_hexagon_unit_cells):
     a = 2.5  # mm
     l1 = 1.58  # mm
     unit_cell_size = a
@@ -537,10 +539,14 @@ def insert_unit_cells():
     # Create the metasurface SIW unit cells on the ground plane and the transmission line surfaces
     #
     unit_cell_x_positions = -0.5 * L2 + np.arange(0.5 * unit_cell_size, L2, unit_cell_size)
-    # unit_cell_y_positions = np.linspace(-0.5 * wr, +0.5 * wr, 2, endpoint=True)
-    unit_cell_y_positions = np.array([-0.5 * wr - 2.5, +0.5 * wr + 2.5, -0.5 * wr, +0.5 * wr])
-    # unit_cell_xy_orientation = np.linspace(-90, 90, 2, endpoint=True)
-    unit_cell_xy_orientation = np.array([-90.0, 90.0, -90.0, 90.0])
+
+    if insert_hexagon_unit_cells:
+        unit_cell_y_positions = np.array([-0.5 * wr, +0.5 * wr, -0.5 * wr - 2.5, +0.5 * wr + 2.5])
+        unit_cell_xy_orientation = np.array([-90.0, 90.0, -90.0, 90.0])
+    else:
+        unit_cell_y_positions = np.linspace(-0.5 * wr, +0.5 * wr, 2, endpoint=True)
+        unit_cell_xy_orientation = np.linspace(-90, 90, 2, endpoint=True)
+
     unit_cell_z_positions = np.linspace(-0.5 * height_mm, +0.5 * height_mm, 2, endpoint=True)
     subtraction_sheet = (ground_plane_geom, transmission_line_plane_geom)
     num_unit_cells_x = unit_cell_x_positions.size
@@ -560,10 +566,12 @@ def insert_unit_cells():
                 translation[2] = z_pos
                 target_geometry = subtraction_sheet[geom_index]
                 if index_y < 2:
-                    transformed_coordinates = transform_xy_coords(hexagon_unit_cell_coordinates_zero_centered, translation,
+                    transformed_coordinates = transform_xy_coords(square_unit_cell_coordinates_zero_centered,
+                                                                  translation,
                                                                   xy_rotation)
                 else:
-                    transformed_coordinates = transform_xy_coords(square_unit_cell_coordinates_zero_centered, translation,
+                    transformed_coordinates = transform_xy_coords(hexagon_unit_cell_coordinates_zero_centered,
+                                                                  translation,
                                                                   xy_rotation)
                 unit_cell_transformed_coordinate_list = [elem.tolist() for elem in transformed_coordinates]
                 unit_cell_polyline_params = {
@@ -684,8 +692,9 @@ def insert_unit_cells():
         }
         hfss.modeler.subtract(**subtract_params)
 
+
 if not OMIT_MTS_UNIT_CELLS:
-    insert_unit_cells()
+    insert_unit_cells(insert_hexagon_unit_cells=INSERT_HEXAGON_MTS_UNIT_CELLS)
 
 # port_1_position = np.array([-0.5 * antenna_length_mm,
 #                             -0.5 * feed_rect_width_mm,
