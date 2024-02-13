@@ -218,8 +218,8 @@ dielectric_slab_params = {"name": "dielectric_slab",
 dielectric_slab_geom = hfss.modeler.create_box(**dielectric_slab_params)
 dielectric_slab_geom.color = dielectric_color
 
-transmission_line_position = -0.5 * np.array([transmission_line_length_mm,
-                                             transmission_line_width_mm,
+transmission_line_position = 0.5 * np.array([-transmission_line_length_mm,
+                                             -transmission_line_width_mm,
                                              height_mm])
 transmission_line_size = np.array([transmission_line_length_mm,
                                    transmission_line_width_mm])
@@ -337,13 +337,10 @@ transmission_line_plane_geom.color = metal_color
 # feed_trap_geom_1.color = metal_color
 # feed_trap_geom_1.transparency = 0
 #
-# hfss.assign_perfecte_to_sheets(
-#     **{"sheet_list": [ground_plane_geom.name,
-#                       transmission_line_plane_geom.name,
-#                       feed_rect_geom_0.name, feed_trap_geom_0.name,
-#                       feed_rect_geom_1.name, feed_trap_geom_1.name],
-#        "sourcename": None,
-#        "is_infinite_gnd": False})
+hfss.assign_perfecte_to_sheets(
+    **{"sheet_list": [ground_plane_geom.name, transmission_line_plane_geom.name],
+       "sourcename": None,
+       "is_infinite_gnd": False})
 
 # MAKE HOLES FOR THE RF 2.92 CONNECTOR BOLTS
 hole_positions_y = np.array([-4.75, 4.75])
@@ -831,7 +828,7 @@ success = hfss.create_open_region(**open_region_params)
 
 analysis_plane_position = np.array([ground_plane_position[0], ground_plane_position[1], 0])
 analysis_plane_size = ground_plane_size
-analysis_plane_params = {"name": "plot_waveguide_mode",
+analysis_plane_params = {"name": "plot_waveguide_fields",
                          "csPlane": "XY",
                          "position": "{}mm,{}mm,{}mm".format(analysis_plane_position[0],
                                                              analysis_plane_position[1],
