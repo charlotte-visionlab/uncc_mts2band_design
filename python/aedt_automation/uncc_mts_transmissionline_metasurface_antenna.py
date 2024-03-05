@@ -360,7 +360,7 @@ for hole_x_pos in hole_positions_x:
         hole_geom = hfss.modeler.create_cylinder(**hole_params)
         hole_geom.color = radiation_box_color
         subtract_params = {
-            "blank_list": [dielectric_slab_geom.name],
+            "blank_list": [dielectric_slab_geom.name, ground_plane_geom.name],
             "tool_list": [hole_geom.name],
             "keep_originals": False
         }

@@ -75,6 +75,7 @@ board_width_mm = 22  # mm
 board_length_mm = 2 * (margin_length) + design_size
 
 transmission_line_width_mm = 0.48  # mm
+port_width_mm = 0.25  # mm
 transmission_line_length_mm = board_length_mm
 
 # antenna_dimensions_xy_cm = np.array([40, 12.4])
@@ -216,7 +217,7 @@ for hole_x_pos in hole_positions_x:
         hole_geom = hfss.modeler.create_cylinder(**hole_params)
         hole_geom.color = radiation_box_color
         subtract_params = {
-            "blank_list": [dielectric_slab_geom.name],
+            "blank_list": [dielectric_slab_geom.name, ground_plane_geom.name],
             "tool_list": [hole_geom.name],
             "keep_originals": False
         }
@@ -308,9 +309,9 @@ if USE_CONNECTORS:
     hfss.modeler.set_working_coordinate_system("Global")
 else:
     port_1_position = np.array([-0.5 * board_length_mm,
-                                -0.5 * board_width_mm,
+                                -0.5 * port_width_mm,
                                 -0.5 * height_mm])
-    port_1_size = np.array([feed_rect_width_mm, height_mm])
+    port_1_size = np.array([port_width_mm, height_mm])
     port_1_params = {"name": "port_1",
                      "csPlane": "YZ",
                      "position": "{}mm,{}mm,{}mm".format(port_1_position[0],
@@ -333,10 +334,10 @@ else:
                                 "renormalize": True,
                                 "deembed": False,
                                 "terminals_rename": True}
-    hfss.lumped_port(**port_1_excitation_params)
+    port1_lumped_port = hfss.lumped_port(**port_1_excitation_params)
 
-    port_2_position = np.array([0.5 * antenna_length_mm,
-                                -0.5 * feed_rect_width_mm,
+    port_2_position = np.array([0.5 * board_length_mm,
+                                -0.5 * port_width_mm,
                                 -0.5 * height_mm])
     port_2_size = port_1_size
     port_2_params = {"name": "port_2",
@@ -361,7 +362,7 @@ else:
                                 "renormalize": True,
                                 "deembed": False,
                                 "terminals_rename": True}
-    hfss.lumped_port(**port_2_excitation_params)
+    port2_lumped_port = hfss.lumped_port(**port_2_excitation_params)
 
 if enclose_antenna_with_pec_boundary:
     padding = 9.5 * 2  # mm The 2.92 connector extends 9.5 mm beyond board edge
@@ -510,7 +511,7 @@ non_linear_feval_count = 0
 
 
 def error_function(design_geometry_params):
-    global non_linear_feval_count
+    global non_linear_feval_count, USE_CONNECTORS, port1_lumped_port, port2_lumped_port
     transmission_line_width_mm = design_geometry_params[0]
     print("Current parameters:", transmission_line_width_mm)
     design_components = []
@@ -538,6 +539,18 @@ def error_function(design_geometry_params):
         **{"sheet_list": [transmission_line_plane_geom.name],
            "sourcename": None,
            "is_infinite_gnd": False})
+    if not USE_CONNECTORS:
+        oModule = hfss.get_module("BoundarySetup")
+        oModule.AutoIdentifyTerminals(
+            [
+                "NAME:ReferenceConductors",
+                "cell_ground_plane"
+            ], "port_1_excitation", True)
+        oModule.AutoIdentifyTerminals(
+            [
+                "NAME:ReferenceConductors",
+                "cell_ground_plane"
+            ], "port_2_excitation", True)
 
     setup_ok = hfss.validate_full_design()
 
@@ -554,8 +567,13 @@ def error_function(design_geometry_params):
         "blocking": True
     }
     hfss.analyze_setup(**setup_solver_configuration_params)
-    s11_data_channel_str = "dB(St(RF292_connector_1_excitation,RF292_connector_1_excitation))"
-    s21_data_channel_str = "dB(St(RF292_connector_2_excitation,RF292_connector_1_excitation))"
+    if USE_CONNECTORS:
+        s11_data_channel_str = "dB(St(RF292_connector_1_excitation,RF292_connector_1_excitation))"
+        s21_data_channel_str = "dB(St(RF292_connector_2_excitation,RF292_connector_1_excitation))"
+    else:
+        s11_data_channel_str = "dB(St(transmission_line_T1,transmission_line_T1))"
+        s21_data_channel_str = "dB(St(transmission_line_T2,transmission_line_T1))"
+
     s11_solution_data = hfss.post.get_solution_data(expressions=s11_data_channel_str,
                                                     setup_sweep_name="TLine_Setup : sweep",
                                                     report_category="Terminal S Parameter")
@@ -567,8 +585,7 @@ def error_function(design_geometry_params):
     #       setup_sweep_name="MTS_EigenMode_Setup : LastAdaptive",
     #       report_category="Solution Convergence")
 
-    vals_np_real = np.array(
-        list(s11_solution_data.full_matrix_real_imag[0][s11_data_channel_str].values()))
+    vals_np_real = np.array(list(s11_solution_data.full_matrix_real_imag[0][s11_data_channel_str].values()))
     s11_vals = np.squeeze(vals_np_real)
     s11_freqs = np.array(s21_solution_data.primary_sweep_values)
     s11_freqs_units_str = s11_solution_data.units_sweeps['Freq']  # 'GHz'
