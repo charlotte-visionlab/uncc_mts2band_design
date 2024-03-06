@@ -66,34 +66,385 @@ subtract_tool_color = [64, 64, 64]  # dary gray
 perfectly_matched_layer_color = [255, 128, 128]  # light red
 port_color = [31, 81, 255]  # blue
 
-num_patches = 10
-
-strip_width_mm = 0.8  # mm
-feed_trapezoid_start_width_mm = 0.25  # mm
-feed_trapezoid_length_mm = 2.5  # mm
-feed_rectangle_length_mm = 0.5  # mm
-gap_length_mm = 1.5  # mm
-patch_length_mm = 0.9  # mm
-patch_width_mm = 0.8  # mm
-feed_length_mm = feed_rectangle_length_mm + feed_trapezoid_length_mm
-antenna_length_mm = num_patches * patch_length_mm + 1.5 * (num_patches + 1)  # mm
-board_length_mm = (2 * feed_length_mm) + antenna_length_mm
-
-board_margin_xy_mm = np.array([2, 0])
-board_width_mm = patch_width_mm + 2 * board_margin_xy_mm[0]
-antenna_dimensions_xy_mm = np.array([board_length_mm, board_width_mm])
+colors = {"metal": [143, 175, 143],
+          "dielectric": [255, 255, 128],
+          "radiation box": [128, 255, 255],
+          "boolean tool": [64, 64, 64],
+          "perfectly matched layer": [255, 128, 128],
+          "port": [31, 81, 255]}
 
 # define a custom projectname and design name to allow multiple runs to simultaneously run on a single host
 time_start = datetime.now()
 current_time_str = datetime.now().strftime("%b%d_%H-%M-%S")
 
-project_name = "MTS Antenna " + current_time_str
-design_name = "MTS HFSS " + current_time_str
+project_name = "TL Antenna " + current_time_str
+design_name = "TL HFSS " + current_time_str
 
-save_file_prefix = "mts_antenna"
+save_file_prefix = "tl_antenna_100GHz"
 save_filename_no_extension = save_file_prefix + "_" + current_time_str + "_" + socket.gethostname()
 save_filename_matlab = save_filename_no_extension + ".mat"
-save_filename_numpy = save_filename_no_extension + ".npy"
+save_filename_log = save_filename_no_extension + ".log"
+file_data = open(save_filename_log, "w")
+optimization_parameters = ["num_patches", "trapezoid_width", "trapezoid_size_pct"]
+column_titles = ["s21_avg", "s11_avg", "error"]
+file_data.write("{}, {}, {}, {}, {}, {}\n".format(*optimization_parameters, *column_titles))
+
+num_patches = 12
+board_length_mm = 42
+
+# strip_width_mm = 0.8  # mm
+# gap_length_mm = 1.5  # mm
+# patch_length_mm = 0.9  # mm
+
+i_strip_width_mm = wavelength_mm / 4 - 0.1  # mm
+i_gap_length_mm = wavelength_mm / 2  # mm
+i_patch_length_mm = wavelength_mm / 4  # mm
+# patch_width_mm = i_strip_width_mm  # mm
+
+antenna_length_mm = num_patches * i_patch_length_mm + i_gap_length_mm * (num_patches + 1)  # mm
+feed_length_mm = 0.5 * (board_length_mm - antenna_length_mm)
+feed_trapezoid_start_width_mm = 0.25  # mm
+feed_trapezoid_length_mm = 0.5 * feed_length_mm  # mm
+feed_rectangle_length_mm = feed_length_mm - feed_trapezoid_length_mm
+
+board_margin_xy_mm = np.array([2, 0])
+board_width_mm = i_strip_width_mm + 2 * board_margin_xy_mm[0]
+antenna_dimensions_xy_mm = np.array([board_length_mm, board_width_mm])
+
+non_linear_feval_count = 0
+
+
+def construct_antenna(o_antenna_parameters):
+    global hfss
+    port_size_y_mm = 0.5  # mm
+
+    o_antenna_parameters[0] = int(o_antenna_parameters[0])
+    print("Current parameters:", o_antenna_parameters)
+    component_attributes = []
+    component_geometries = []
+
+    # unpack optimization parameters
+    o_num_patches = int(o_antenna_parameters[0])
+    o_feed_trapezoid_start_width_mm = o_antenna_parameters[1]
+    patch_length_mm = o_antenna_parameters[3]
+    gap_length_mm = o_antenna_parameters[4]
+    strip_width_mm = o_antenna_parameters[5]
+    o_antenna_length_mm = o_num_patches * patch_length_mm + gap_length_mm * (o_num_patches + 1)  # mm
+    o_feed_length_mm = 0.5 * (board_length_mm - o_antenna_length_mm)
+    o_feed_trapezoid_length_mm = o_antenna_parameters[2] * o_feed_length_mm
+    o_feed_rectangle_length_mm = o_feed_length_mm - o_feed_trapezoid_length_mm
+
+    o_offset = -0.5 * o_antenna_length_mm + gap_length_mm
+    patch_geom_list = []
+    patch_name_list = []
+    for patch_index in np.arange(0, o_num_patches):
+        patch_position = np.array([o_offset,
+                                   -0.5 * strip_width_mm,
+                                   0.5 * height_mm])
+        patch_size = np.array([patch_length_mm, strip_width_mm])
+        patch_params = {"name": "patch_" + str(patch_index),
+                        "csPlane": "XY",
+                        "position": "{}mm,{}mm,{}mm".format(patch_position[0],
+                                                            patch_position[1],
+                                                            patch_position[2]).split(","),
+                        "dimension_list": "{}mm,{}mm".format(patch_size[0],
+                                                             patch_size[1]).split(","),
+                        "matname": ground_plane_material_name,
+                        "is_covered": True}
+        patch_geom = hfss.modeler.create_rectangle(**patch_params)
+        patch_geom.color = metal_color
+        o_offset += gap_length_mm + patch_length_mm
+        patch_geom_list.append(patch_geom)
+        patch_name_list.append(patch_geom.name)
+        component_geometries.append(patch_geom)
+
+    antenna_pec_boundary = hfss.assign_perfecte_to_sheets(
+        **{"sheet_list": patch_name_list, "sourcename": None, "is_infinite_gnd": False})
+    component_attributes.append(antenna_pec_boundary)
+
+    port_index = 0
+    #  build a feed structure having feed_length_mm length along the X axis (the propagation axis)
+    feed_rect_length_mm = o_feed_rectangle_length_mm
+    feed_rect_width_mm = strip_width_mm
+    trapezoid_top_width = o_feed_trapezoid_start_width_mm
+    trapezoid_bottom_width = strip_width_mm
+    feed_rect_position = np.array([-0.5 * board_length_mm + o_feed_trapezoid_length_mm,
+                                   -0.5 * strip_width_mm,
+                                   0.5 * height_mm])
+    feed_rect_size = np.array([o_feed_rectangle_length_mm, feed_rect_width_mm])
+    feed_rect_params = {"name": "feed_rectanglar_portion_" + str(port_index),
+                        "csPlane": "XY",
+                        "position": "{}mm,{}mm,{}mm".format(feed_rect_position[0],
+                                                            feed_rect_position[1],
+                                                            feed_rect_position[2]).split(","),
+                        "dimension_list": "{}mm,{}mm".format(feed_rect_size[0],
+                                                             feed_rect_size[1]).split(","),
+                        "matname": ground_plane_material_name,
+                        "is_covered": True}
+    feed_rect_geom_0 = hfss.modeler.create_rectangle(**feed_rect_params)
+    feed_rect_geom_0.color = metal_color
+    component_geometries.append(feed_rect_geom_0)
+
+    board_edge = [-0.5 * board_length_mm, -0.5 * o_feed_trapezoid_start_width_mm]
+    trap_position_list = np.array([np.array([board_edge[0],
+                                             board_edge[1], feed_rect_position[2]]),
+                                   np.array([board_edge[0],
+                                             board_edge[1] + o_feed_trapezoid_start_width_mm, feed_rect_position[2]]),
+                                   np.array([board_edge[0] + o_feed_trapezoid_length_mm,
+                                             0.5 * strip_width_mm, feed_rect_position[2]]),
+                                   np.array([board_edge[0] + o_feed_trapezoid_length_mm,
+                                             -0.5 * strip_width_mm, feed_rect_position[2]])])
+    trap_position_list = [elem.tolist() for elem in trap_position_list]
+    trap_polyline_params = {
+        "position_list": trap_position_list,
+        "segment_type": None,
+        "cover_surface": True,
+        "close_surface": True,
+        "name": "feed_trapezoid_portion_" + str(port_index),
+        "matname": None,
+        "xsection_type": None,
+        "xsection_orient": None,
+        "xsection_width": 1,
+        "xsection_topwidth": 1,
+        "xsection_height": 1,
+        "xsection_num_seg": 0,
+        "xsection_bend_type": None,
+        "non_model": False
+    }
+    feed_trap_geom_0 = hfss.modeler.create_polyline(**trap_polyline_params)
+    feed_trap_geom_0.color = metal_color
+    feed_trap_geom_0.transparency = 0
+    component_geometries.append(feed_trap_geom_0)
+
+    port_index = 1
+    #  build a feed structure having feed_length_cm length along the Y axis (the propagation axis)
+    feed_rect_position = np.array([0.5 * board_length_mm - o_feed_trapezoid_length_mm - o_feed_rectangle_length_mm,
+                                   -0.5 * strip_width_mm,
+                                   0.5 * height_mm])
+    feed_rect_size = np.array([o_feed_rectangle_length_mm, feed_rect_width_mm])
+    feed_rect_params = {"name": "feed_rectanglar_portion_" + str(port_index),
+                        "csPlane": "XY",
+                        "position": "{}mm,{}mm,{}mm".format(feed_rect_position[0],
+                                                            feed_rect_position[1],
+                                                            feed_rect_position[2]).split(","),
+                        "dimension_list": "{}mm,{}mm".format(feed_rect_size[0],
+                                                             feed_rect_size[1]).split(","),
+                        "matname": ground_plane_material_name,
+                        "is_covered": True}
+    feed_rect_geom_1 = hfss.modeler.create_rectangle(**feed_rect_params)
+    feed_rect_geom_1.color = metal_color
+    component_geometries.append(feed_rect_geom_1)
+
+    board_edge = [0.5 * board_length_mm, -0.5 * o_feed_trapezoid_start_width_mm]
+    trap_position_list = np.array([np.array([board_edge[0],
+                                             board_edge[1], feed_rect_position[2]]),
+                                   np.array([board_edge[0],
+                                             board_edge[1] + o_feed_trapezoid_start_width_mm, feed_rect_position[2]]),
+                                   np.array([board_edge[0] - o_feed_trapezoid_length_mm,
+                                             0.5 * strip_width_mm, feed_rect_position[2]]),
+                                   np.array([board_edge[0] - o_feed_trapezoid_length_mm,
+                                             -0.5 * strip_width_mm, feed_rect_position[2]])])
+    trap_position_list = [elem.tolist() for elem in trap_position_list]
+    trap_polyline_params = {
+        "position_list": trap_position_list,
+        "segment_type": None,
+        "cover_surface": True,
+        "close_surface": True,
+        "name": "feed_trapezoid_portion_" + str(port_index),
+        "matname": None,
+        "xsection_type": None,
+        "xsection_orient": None,
+        "xsection_width": 1,
+        "xsection_topwidth": 1,
+        "xsection_height": 1,
+        "xsection_num_seg": 0,
+        "xsection_bend_type": None,
+        "non_model": False
+    }
+    feed_trap_geom_1 = hfss.modeler.create_polyline(**trap_polyline_params)
+    feed_trap_geom_1.color = metal_color
+    feed_trap_geom_1.transparency = 0
+    component_geometries.append(feed_trap_geom_1)
+
+    feed_pec_boundary = hfss.assign_perfecte_to_sheets(
+        **{"sheet_list": [feed_rect_geom_0.name, feed_trap_geom_0.name,
+                          feed_rect_geom_1.name, feed_trap_geom_1.name],
+           "sourcename": None,
+           "is_infinite_gnd": False})
+    component_attributes.append(feed_pec_boundary)
+    port_1_position = np.array([-0.5 * board_length_mm,
+                                # -0.5 * o_feed_trapezoid_start_width_mm,
+                                -0.5 * port_size_y_mm,
+                                -0.5 * height_mm])
+    # port_1_size = np.array([o_feed_trapezoid_start_width_mm, height_mm])
+    port_1_size = np.array([port_size_y_mm, height_mm])
+    port_1_params = {"name": "port_1",
+                     "csPlane": "YZ",
+                     "position": "{}mm,{}mm,{}mm".format(port_1_position[0],
+                                                         port_1_position[1],
+                                                         port_1_position[2]).split(","),
+                     "dimension_list": "{}mm,{}mm".format(port_1_size[0],
+                                                          port_1_size[1]).split(","),
+                     "matname": None,
+                     "is_covered": True}
+    port_1_geom = hfss.modeler.create_rectangle(**port_1_params)
+    port_1_geom.color = radiation_box_color
+    component_geometries.append(port_1_geom)
+
+    port_1_excitation_params = {"signal": port_1_geom,
+                                "reference": ground_plane_geom,
+                                "create_port_sheet": False,
+                                "port_on_plane": True,
+                                "integration_line": 0,
+                                "impedance": 50,
+                                "name": "port_1_excitation",
+                                "renormalize": True,
+                                "deembed": False,
+                                "terminals_rename": True}
+    lumped_port_1 = hfss.lumped_port(**port_1_excitation_params)
+    component_attributes.append(lumped_port_1)
+
+    port_2_position = np.array([0.5 * board_length_mm,
+                                # -0.5 * o_feed_trapezoid_start_width_mm,
+                                -0.5 * port_size_y_mm,
+                                -0.5 * height_mm])
+    port_2_size = port_1_size
+    port_2_params = {"name": "port_2",
+                     "csPlane": "YZ",
+                     "position": "{}mm,{}mm,{}mm".format(port_2_position[0],
+                                                         port_2_position[1],
+                                                         port_2_position[2]).split(","),
+                     "dimension_list": "{}mm,{}mm".format(port_2_size[0],
+                                                          port_2_size[1]).split(","),
+                     "matname": None,
+                     "is_covered": True}
+    port_2_geom = hfss.modeler.create_rectangle(**port_2_params)
+    port_2_geom.color = radiation_box_color
+    component_geometries.append(port_2_geom)
+
+    port_2_excitation_params = {"signal": port_2_geom,
+                                "reference": ground_plane_geom,
+                                "create_port_sheet": False,
+                                "port_on_plane": True,
+                                "integration_line": 0,
+                                "impedance": 50,
+                                "name": "port_2_excitation",
+                                "renormalize": True,
+                                "deembed": False,
+                                "terminals_rename": True}
+    lumped_port_2 = hfss.lumped_port(**port_2_excitation_params)
+    component_attributes.append(lumped_port_2)
+    return component_attributes + component_geometries
+
+
+def antenna_design_error_function(o_antenna_parameters):
+    global non_linear_feval_count
+    design_elements = construct_antenna(o_antenna_parameters)
+    setup_ok = hfss.validate_full_design()
+    setup_solver_configuration_params = {
+        "name": "LW_TL_Antenna_Setup",
+        "num_cores": solver_configuration["num_cores"],
+        "num_tasks": 1,
+        "num_gpu": solver_configuration["num_gpu"],
+        "acf_file": None,
+        "use_auto_settings": True,
+        "num_variations_to_distribute": None,
+        "allowed_distribution_types": None,
+        "revert_to_initial_mesh": False,
+        "blocking": True
+    }
+    hfss.analyze_setup(**setup_solver_configuration_params)
+
+    non_linear_feval_count += 1
+
+    s11_data_channel_str = "dB(St(port_1_excitation_T1,port_1_excitation_T1))"
+    s21_data_channel_str = "dB(St(port_2_excitation_T1,port_1_excitation_T1))"
+    gain_theta_channel_str = "dB(GainTheta)"
+
+    s11_solution_data = hfss.post.get_solution_data(expressions=s11_data_channel_str,
+                                                    setup_sweep_name="LW_TL_Antenna_Setup : LastAdaptive",
+                                                    report_category="Terminal S Parameter")
+    s21_solution_data = hfss.post.get_solution_data(expressions=s21_data_channel_str,
+                                                    setup_sweep_name="LW_TL_Antenna_Setup : LastAdaptive",
+                                                    report_category="Terminal S Parameter")
+    gain_theta_phi_0_data = hfss.post.get_solution_data(expressions=gain_theta_channel_str,
+                                                        setup_sweep_name="LW_TL_Antenna_Setup : LastAdaptive",
+                                                        variations={"Freq": "100GHz", "Phi": "0deg"},
+                                                        primary_sweep_variable="Theta",
+                                                        report_category="Far Fields",
+                                                        context="Elevation")
+
+    gain_theta_phi_90_data = hfss.post.get_solution_data(expressions=gain_theta_channel_str,
+                                                         setup_sweep_name="LW_TL_Antenna_Setup : LastAdaptive",
+                                                         variations={"Freq": "100GHz", "Phi": "90deg"},
+                                                         primary_sweep_variable="Theta",
+                                                         report_category="Far Fields",
+                                                         context="Elevation")
+
+    vals_np_real = np.array(list(s11_solution_data.full_matrix_real_imag[0][s11_data_channel_str].values()))
+    s11_vals = np.squeeze(vals_np_real)
+    s11_freqs = np.array(s21_solution_data.primary_sweep_values)
+    s11_freqs_units_str = s11_solution_data.units_sweeps['Freq']  # 'GHz'
+    vals_np_real = np.array(
+        list(s21_solution_data.full_matrix_real_imag[0][s21_data_channel_str].values()))
+    s21_vals = np.squeeze(vals_np_real)
+    s21_freqs = s21_solution_data.primary_sweep_values
+    s21_freqs_units_str = s21_solution_data.units_sweeps['Freq']  # 'GHz'
+    s11_vals = s11_vals.reshape(s11_vals.size)
+    s21_vals = s21_vals.reshape(s21_vals.size)
+
+    gain_theta_phi_0_vals = np.array(
+        list(gain_theta_phi_0_data.full_matrix_real_imag[0][gain_theta_channel_str].values()))
+    gain_theta_phi_90_vals = np.array(
+        list(gain_theta_phi_90_data.full_matrix_real_imag[0][gain_theta_channel_str].values()))
+    gain_theta_angles = np.array(gain_theta_phi_0_data.primary_sweep_values)
+    plt.close()
+    plt.figure()
+    plt.plot(gain_theta_angles, gain_theta_phi_0_vals)
+    plt.title("Antenna Gain @  {:.1f} GHz iteration {}".format(frequency_GHz, non_linear_feval_count))
+    plt.plot(gain_theta_angles, gain_theta_phi_90_vals)
+    plt.ylabel("Gain (dB)")
+    x_axis_units_str = str(gain_theta_phi_0_data.units_sweeps['Theta'])
+    plt.xlabel("Theta ("+x_axis_units_str+")")
+    plt.legend(["Phi=0 deg", "Phi=90 deg"])
+    plt.draw()
+    plt.pause(1)
+    # plt.plot(s21_freqs, s21_vals)
+    # plt.title("Non-Linear Optimization Evaluation " + str(non_linear_feval_count) +
+    #           ": x = ({:.2f})".format( design_geometry_params[0]))
+    # plt.ylabel("dB")
+    # plt.xlabel(s21_freqs_units_str)
+    # plt.legend(["S_11", "S_21"])
+
+    plt.savefig('antenna_opt_gain_it{:03d}.png'.format(non_linear_feval_count))
+
+    plot_obj = hfss.plot(show=False, view="xy", plot_air_objects=False,
+                         show_legend=False, force_opacity_value=True)
+    plot_obj.background_color = [153, 203, 255]
+    plot_obj.zoom = 1.0
+    plot_obj.show_grid = False
+    plot_obj.show_axes = False
+    plot_obj.bounding_box = False
+    plot_obj.plot("antenna_opt_model_it{:03d}.jpg".format(non_linear_feval_count))
+
+    freq_idxs_of_interest = np.argwhere((s11_freqs > frequency_GHz - 1) & (s11_freqs < frequency_GHz + 1))
+    theta_idxs_of_interest = np.argwhere((gain_theta_angles > -90) & (gain_theta_angles < 90))
+
+    import scipy.signal.windows as windows
+    gaussian_window_samples = windows.gaussian(len(theta_idxs_of_interest), 30)
+    gaussian_window_samples_shifted = gaussian_window_samples - 0.5 * np.max(gaussian_window_samples)
+    # error = np.sum(-s21_vals[freq_idxs_of_interest] < -2) + np.sum(s11_vals[freq_idxs_of_interest] > -9)
+    freq_idxs_of_interest = freq_idxs_of_interest.flatten()
+    gain_term = np.sum(gaussian_window_samples_shifted * gain_theta_phi_0_vals[theta_idxs_of_interest])
+    s21_term = np.average(s21_vals[freq_idxs_of_interest])
+    s11_term = np.average(s11_vals[freq_idxs_of_interest])
+    error = -10 * gain_term + 3 * s11_term + s21_term
+    print("Error = {} Gain = {} S11 = {} S21 = {}".format(error, gain_term, s11_term, s21_term))
+    file_data.write("{:.2f}, {:.2f}, {:.2f}, ".format(*o_antenna_parameters) +
+                    "{:.2f}, {:.2f}, {:.2f}\n".format(np.average(s21_vals), np.average(s11_vals), error))
+    for element in design_elements:
+        element.delete()
+    return error
 
 
 def matplotlib_pyplot_setup():
@@ -170,6 +521,11 @@ ground_plane_params = {"name": "cell_ground_plane",
 ground_plane_geom = hfss.modeler.create_rectangle(**ground_plane_params)
 ground_plane_geom.color = metal_color
 
+hfss.assign_perfecte_to_sheets(
+    **{"sheet_list": [ground_plane_geom.name],
+       "sourcename": None,
+       "is_infinite_gnd": False})
+
 # FIT ALL
 hfss.modeler.fit_all()
 
@@ -188,196 +544,6 @@ dielectric_slab_params = {"name": "dielectric_slab",
 dielectric_slab_geom = hfss.modeler.create_box(**dielectric_slab_params)
 dielectric_slab_geom.color = dielectric_color
 
-port_index = 0
-#  build a feed structure having feed_length_mm length along the X axis (the propagation axis)
-feed_rect_length_mm = feed_rectangle_length_mm
-feed_rect_width_mm = strip_width_mm
-trapezoid_top_width = feed_trapezoid_start_width_mm
-trapezoid_bottom_width = strip_width_mm
-feed_rect_position = np.array([-0.5 * board_length_mm + feed_trapezoid_length_mm,
-                               -0.5 * strip_width_mm,
-                               0.5 * height_mm])
-feed_rect_size = np.array([feed_rect_length_mm, feed_rect_width_mm])
-feed_rect_params = {"name": "feed_rectanglar_portion_" + str(port_index),
-                    "csPlane": "XY",
-                    "position": "{}mm,{}mm,{}mm".format(feed_rect_position[0],
-                                                        feed_rect_position[1],
-                                                        feed_rect_position[2]).split(","),
-                    "dimension_list": "{}mm,{}mm".format(feed_rect_size[0],
-                                                         feed_rect_size[1]).split(","),
-                    "matname": ground_plane_material_name,
-                    "is_covered": True}
-feed_rect_geom_0 = hfss.modeler.create_rectangle(**feed_rect_params)
-feed_rect_geom_0.color = metal_color
-board_edge = [-0.5 * board_length_mm, -0.5 * feed_trapezoid_start_width_mm]
-trap_position_list = np.array([np.array([board_edge[0],
-                                         board_edge[1], feed_rect_position[2]]),
-                               np.array([board_edge[0],
-                                         board_edge[1] + feed_trapezoid_start_width_mm, feed_rect_position[2]]),
-                               np.array([board_edge[0] + feed_trapezoid_length_mm,
-                                         0.5 * strip_width_mm, feed_rect_position[2]]),
-                               np.array([board_edge[0] + feed_trapezoid_length_mm,
-                                         -0.5 * strip_width_mm, feed_rect_position[2]])])
-trap_position_list = [elem.tolist() for elem in trap_position_list]
-trap_polyline_params = {
-    "position_list": trap_position_list,
-    "segment_type": None,
-    "cover_surface": True,
-    "close_surface": True,
-    "name": "feed_trapezoid_portion_" + str(port_index),
-    "matname": None,
-    "xsection_type": None,
-    "xsection_orient": None,
-    "xsection_width": 1,
-    "xsection_topwidth": 1,
-    "xsection_height": 1,
-    "xsection_num_seg": 0,
-    "xsection_bend_type": None,
-    "non_model": False
-}
-feed_trap_geom_0 = hfss.modeler.create_polyline(**trap_polyline_params)
-feed_trap_geom_0.color = metal_color
-feed_trap_geom_0.transparency = 0
-
-port_index = 1
-#  build a feed structure having feed_length_cm length along the Y axis (the propagation axis)
-feed_rect_position = np.array([0.5 * board_length_mm - feed_trapezoid_length_mm - feed_rect_length_mm,
-                               -0.5 * strip_width_mm,
-                               0.5 * height_mm])
-feed_rect_size = np.array([feed_rect_length_mm, feed_rect_width_mm])
-feed_rect_params = {"name": "feed_rectanglar_portion_" + str(port_index),
-                    "csPlane": "XY",
-                    "position": "{}mm,{}mm,{}mm".format(feed_rect_position[0],
-                                                        feed_rect_position[1],
-                                                        feed_rect_position[2]).split(","),
-                    "dimension_list": "{}mm,{}mm".format(feed_rect_size[0],
-                                                         feed_rect_size[1]).split(","),
-                    "matname": ground_plane_material_name,
-                    "is_covered": True}
-feed_rect_geom_1 = hfss.modeler.create_rectangle(**feed_rect_params)
-feed_rect_geom_1.color = metal_color
-board_edge = [0.5 * board_length_mm, -0.5 * feed_trapezoid_start_width_mm]
-trap_position_list = np.array([np.array([board_edge[0],
-                                         board_edge[1], feed_rect_position[2]]),
-                               np.array([board_edge[0],
-                                         board_edge[1] + feed_trapezoid_start_width_mm, feed_rect_position[2]]),
-                               np.array([board_edge[0] - feed_trapezoid_length_mm,
-                                         0.5 * strip_width_mm, feed_rect_position[2]]),
-                               np.array([board_edge[0] - feed_trapezoid_length_mm,
-                                         -0.5 * strip_width_mm, feed_rect_position[2]])])
-trap_position_list = [elem.tolist() for elem in trap_position_list]
-trap_polyline_params = {
-    "position_list": trap_position_list,
-    "segment_type": None,
-    "cover_surface": True,
-    "close_surface": True,
-    "name": "feed_trapezoid_portion_" + str(port_index),
-    "matname": None,
-    "xsection_type": None,
-    "xsection_orient": None,
-    "xsection_width": 1,
-    "xsection_topwidth": 1,
-    "xsection_height": 1,
-    "xsection_num_seg": 0,
-    "xsection_bend_type": None,
-    "non_model": False
-}
-feed_trap_geom_1 = hfss.modeler.create_polyline(**trap_polyline_params)
-feed_trap_geom_1.color = metal_color
-feed_trap_geom_1.transparency = 0
-
-hfss.assign_perfecte_to_sheets(
-    **{"sheet_list": [ground_plane_geom.name,
-                      # transmission_line_plane_geom.name,
-                      feed_rect_geom_0.name, feed_trap_geom_0.name,
-                      feed_rect_geom_1.name, feed_trap_geom_1.name],
-       "sourcename": None,
-       "is_infinite_gnd": False})
-
-offset = -0.5 * board_length_mm + feed_length_mm + gap_length_mm
-patch_geom_list = []
-patch_name_list = []
-for patch_index in np.arange(0, num_patches):
-    patch_position = np.array([offset,
-                               -0.5 * strip_width_mm,
-                               0.5 * height_mm])
-    patch_size = np.array([patch_length_mm, patch_width_mm])
-    patch_params = {"name": "patch_" + str(patch_index),
-                    "csPlane": "XY",
-                    "position": "{}mm,{}mm,{}mm".format(patch_position[0],
-                                                        patch_position[1],
-                                                        patch_position[2]).split(","),
-                    "dimension_list": "{}mm,{}mm".format(patch_size[0],
-                                                         patch_size[1]).split(","),
-                    "matname": ground_plane_material_name,
-                    "is_covered": True}
-    patch_geom = hfss.modeler.create_rectangle(**patch_params)
-    patch_geom.color = metal_color
-    offset += gap_length_mm + patch_length_mm
-    patch_geom_list.append(patch_geom)
-    patch_name_list.append(patch_geom.name)
-
-hfss.assign_perfecte_to_sheets(
-    **{"sheet_list": patch_name_list,
-       "sourcename": None,
-       "is_infinite_gnd": False})
-
-port_1_position = np.array([-0.5 * board_length_mm,
-                            -0.5 * feed_trapezoid_start_width_mm,
-                            -0.5 * height_mm])
-port_1_size = np.array([feed_trapezoid_start_width_mm, height_mm])
-port_1_params = {"name": "port_1",
-                 "csPlane": "YZ",
-                 "position": "{}mm,{}mm,{}mm".format(port_1_position[0],
-                                                     port_1_position[1],
-                                                     port_1_position[2]).split(","),
-                 "dimension_list": "{}mm,{}mm".format(port_1_size[0],
-                                                      port_1_size[1]).split(","),
-                 "matname": None,
-                 "is_covered": True}
-port_1_geom = hfss.modeler.create_rectangle(**port_1_params)
-port_1_geom.color = radiation_box_color
-
-port_1_excitation_params = {"signal": port_1_geom,
-                            "reference": ground_plane_geom,
-                            "create_port_sheet": False,
-                            "port_on_plane": True,
-                            "integration_line": 0,
-                            "impedance": 50,
-                            "name": "port_1_excitation",
-                            "renormalize": True,
-                            "deembed": False,
-                            "terminals_rename": True}
-hfss.lumped_port(**port_1_excitation_params)
-
-port_2_position = np.array([0.5 * board_length_mm,
-                            -0.5 * feed_trapezoid_start_width_mm,
-                            -0.5 * height_mm])
-port_2_size = port_1_size
-port_2_params = {"name": "port_2",
-                 "csPlane": "YZ",
-                 "position": "{}mm,{}mm,{}mm".format(port_2_position[0],
-                                                     port_2_position[1],
-                                                     port_2_position[2]).split(","),
-                 "dimension_list": "{}mm,{}mm".format(port_2_size[0],
-                                                      port_2_size[1]).split(","),
-                 "matname": None,
-                 "is_covered": True}
-port_2_geom = hfss.modeler.create_rectangle(**port_2_params)
-port_2_geom.color = radiation_box_color
-
-port_2_excitation_params = {"signal": port_2_geom,
-                            "reference": ground_plane_geom,
-                            "create_port_sheet": False,
-                            "port_on_plane": True,
-                            "integration_line": 0,
-                            "impedance": 50,
-                            "name": "port_2_excitation",
-                            "renormalize": True,
-                            "deembed": False,
-                            "terminals_rename": True}
-hfss.lumped_port(**port_2_excitation_params)
-
 open_region_params = {
     "Frequency": "{}GHz".format(frequency_GHz),
     "Boundary": "Radiation",
@@ -385,114 +551,114 @@ open_region_params = {
     "GPAXis": "-z"}
 success = hfss.create_open_region(**open_region_params)
 
-analysis_plane_position = np.array([ground_plane_position[0], ground_plane_position[1], 0])
-analysis_plane_size = ground_plane_size
-analysis_plane_params = {"name": "plot_waveguide_mode",
-                         "csPlane": "XY",
-                         "position": "{}mm,{}mm,{}mm".format(analysis_plane_position[0],
-                                                             analysis_plane_position[1],
-                                                             analysis_plane_position[2]).split(","),
-                         "dimension_list": "{}mm,{}mm".format(analysis_plane_size[0],
-                                                              analysis_plane_size[1]).split(","),
-                         "matname": None,
-                         "is_covered": True}
-analysis_plane_geom = hfss.modeler.create_rectangle(**analysis_plane_params)
-analysis_plane_geom.color = radiation_box_color
+# analysis_plane_position = np.array([ground_plane_position[0], ground_plane_position[1], 0])
+# analysis_plane_size = ground_plane_size
+# analysis_plane_params = {"name": "plot_waveguide_mode",
+#                          "csPlane": "XY",
+#                          "position": "{}mm,{}mm,{}mm".format(analysis_plane_position[0],
+#                                                              analysis_plane_position[1],
+#                                                              analysis_plane_position[2]).split(","),
+#                          "dimension_list": "{}mm,{}mm".format(analysis_plane_size[0],
+#                                                               analysis_plane_size[1]).split(","),
+#                          "matname": None,
+#                          "is_covered": True}
+# analysis_plane_geom = hfss.modeler.create_rectangle(**analysis_plane_params)
+# analysis_plane_geom.color = radiation_box_color
+# 
+# nf_x_direction = [1, 0, 0]
+# nf_y_direction = [0, 1, 0]
+# nf_z_direction = [0, 0, 1]
+# top_plane_field_cs_params = {"origin": "{}mm,{}mm,{}mm".format(0, 0, 2 * wavelength_mm).split(","),
+#                              "reference_cs": "Global",
+#                              "name": "top_2lambda_CS",
+#                              "mode": "axis",
+#                              "view": "iso",
+#                              "x_pointing": nf_x_direction,
+#                              "y_pointing": nf_y_direction,
+#                              "psi": 0,
+#                              "theta": 0,
+#                              "phi": 0,
+#                              "u": None
+#                              }
+# top_plane_field_cs = hfss.modeler.create_coordinate_system(**top_plane_field_cs_params)
+# 
+# bottom_plane_field_cs_params = {"origin": "{}mm,{}mm,{}mm".format(0, 0, -2 * wavelength_mm).split(","),
+#                                 "reference_cs": "Global",
+#                                 "name": "bottom_2lambda_CS",
+#                                 "mode": "axis",
+#                                 "view": "iso",
+#                                 "x_pointing": nf_x_direction,
+#                                 "y_pointing": nf_y_direction,
+#                                 "psi": 0,
+#                                 "theta": 0,
+#                                 "phi": 0,
+#                                 "u": None
+#                                 }
+# bottom_plane_field_cs = hfss.modeler.create_coordinate_system(**bottom_plane_field_cs_params)
+# 
+# left_plane_field_cs_params = {"origin": "{}mm,{}mm,{}mm".format(0,
+#                                                                 -0.5 * board_width_mm - 2 * wavelength_mm,
+#                                                                 0).split(","),
+#                               "reference_cs": "Global",
+#                               "name": "left_2lambda_CS",
+#                               "mode": "axis",
+#                               "view": "iso",
+#                               "x_pointing": nf_x_direction,
+#                               "y_pointing": nf_z_direction,
+#                               "psi": 0,
+#                               "theta": 0,
+#                               "phi": 0,
+#                               "u": None
+#                               }
+# left_plane_field_cs = hfss.modeler.create_coordinate_system(**left_plane_field_cs_params)
+# right_plane_field_cs_params = {"origin": "{}mm,{}mm,{}mm".format(0,
+#                                                                  0.5 * board_width_mm + 2 * wavelength_mm,
+#                                                                  0).split(","),
+#                                "reference_cs": "Global",
+#                                "name": "right_2lambda_CS",
+#                                "mode": "axis",
+#                                "view": "iso",
+#                                "x_pointing": nf_x_direction,
+#                                "y_pointing": nf_z_direction,
+#                                "psi": 0,
+#                                "theta": 0,
+#                                "phi": 0,
+#                                "u": None
+#                                }
+# right_plane_field_cs = hfss.modeler.create_coordinate_system(**right_plane_field_cs_params)
+# 
+# back_plane_field_cs_params = {"origin": "{}mm,{}mm,{}mm".format(-0.5 * board_length_mm - 2 * wavelength_mm,
+#                                                                 0,
+#                                                                 0).split(","),
+#                               "reference_cs": "Global",
+#                               "name": "back_2lambda_CS",
+#                               "mode": "axis",
+#                               "view": "iso",
+#                               "x_pointing": nf_y_direction,
+#                               "y_pointing": nf_z_direction,
+#                               "psi": 0,
+#                               "theta": 0,
+#                               "phi": 0,
+#                               "u": None
+#                               }
+# back_plane_field_cs = hfss.modeler.create_coordinate_system(**back_plane_field_cs_params)
+# front_plane_field_cs_params = {"origin": "{}mm,{}mm,{}mm".format(0.5 * board_length_mm + 2 * wavelength_mm,
+#                                                                  0,
+#                                                                  0).split(","),
+#                                "reference_cs": "Global",
+#                                "name": "front_2lambda_CS",
+#                                "mode": "axis",
+#                                "view": "iso",
+#                                "x_pointing": nf_y_direction,
+#                                "y_pointing": nf_z_direction,
+#                                "psi": 0,
+#                                "theta": 0,
+#                                "phi": 0,
+#                                "u": None
+#                                }
+# front_plane_field_cs = hfss.modeler.create_coordinate_system(**front_plane_field_cs_params)
 
-nf_x_direction = [1, 0, 0]
-nf_y_direction = [0, 1, 0]
-nf_z_direction = [0, 0, 1]
-top_plane_field_cs_params = {"origin": "{}mm,{}mm,{}mm".format(0, 0, 2 * wavelength_mm).split(","),
-                             "reference_cs": "Global",
-                             "name": "top_2lambda_CS",
-                             "mode": "axis",
-                             "view": "iso",
-                             "x_pointing": nf_x_direction,
-                             "y_pointing": nf_y_direction,
-                             "psi": 0,
-                             "theta": 0,
-                             "phi": 0,
-                             "u": None
-                             }
-top_plane_field_cs = hfss.modeler.create_coordinate_system(**top_plane_field_cs_params)
-
-bottom_plane_field_cs_params = {"origin": "{}mm,{}mm,{}mm".format(0, 0, -2 * wavelength_mm).split(","),
-                                "reference_cs": "Global",
-                                "name": "bottom_2lambda_CS",
-                                "mode": "axis",
-                                "view": "iso",
-                                "x_pointing": nf_x_direction,
-                                "y_pointing": nf_y_direction,
-                                "psi": 0,
-                                "theta": 0,
-                                "phi": 0,
-                                "u": None
-                                }
-bottom_plane_field_cs = hfss.modeler.create_coordinate_system(**bottom_plane_field_cs_params)
-
-left_plane_field_cs_params = {"origin": "{}mm,{}mm,{}mm".format(0,
-                                                                -0.5 * board_width_mm - 2 * wavelength_mm,
-                                                                0).split(","),
-                              "reference_cs": "Global",
-                              "name": "left_2lambda_CS",
-                              "mode": "axis",
-                              "view": "iso",
-                              "x_pointing": nf_x_direction,
-                              "y_pointing": nf_z_direction,
-                              "psi": 0,
-                              "theta": 0,
-                              "phi": 0,
-                              "u": None
-                              }
-left_plane_field_cs = hfss.modeler.create_coordinate_system(**left_plane_field_cs_params)
-right_plane_field_cs_params = {"origin": "{}mm,{}mm,{}mm".format(0,
-                                                                 0.5 * board_width_mm + 2 * wavelength_mm,
-                                                                 0).split(","),
-                               "reference_cs": "Global",
-                               "name": "right_2lambda_CS",
-                               "mode": "axis",
-                               "view": "iso",
-                               "x_pointing": nf_x_direction,
-                               "y_pointing": nf_z_direction,
-                               "psi": 0,
-                               "theta": 0,
-                               "phi": 0,
-                               "u": None
-                               }
-right_plane_field_cs = hfss.modeler.create_coordinate_system(**right_plane_field_cs_params)
-
-back_plane_field_cs_params = {"origin": "{}mm,{}mm,{}mm".format(-0.5 * board_length_mm - 2 * wavelength_mm,
-                                                                0,
-                                                                0).split(","),
-                              "reference_cs": "Global",
-                              "name": "back_2lambda_CS",
-                              "mode": "axis",
-                              "view": "iso",
-                              "x_pointing": nf_y_direction,
-                              "y_pointing": nf_z_direction,
-                              "psi": 0,
-                              "theta": 0,
-                              "phi": 0,
-                              "u": None
-                              }
-back_plane_field_cs = hfss.modeler.create_coordinate_system(**back_plane_field_cs_params)
-front_plane_field_cs_params = {"origin": "{}mm,{}mm,{}mm".format(0.5 * board_length_mm + 2 * wavelength_mm,
-                                                                 0,
-                                                                 0).split(","),
-                               "reference_cs": "Global",
-                               "name": "front_2lambda_CS",
-                               "mode": "axis",
-                               "view": "iso",
-                               "x_pointing": nf_y_direction,
-                               "y_pointing": nf_z_direction,
-                               "psi": 0,
-                               "theta": 0,
-                               "phi": 0,
-                               "u": None
-                               }
-front_plane_field_cs = hfss.modeler.create_coordinate_system(**front_plane_field_cs_params)
-
-solver_setup = hfss.create_setup(setupname="MTS_SIWAntenna_Setup", setuptype="HFSSDriven")
+solver_setup = hfss.create_setup(setupname="LW_TL_Antenna_Setup", setuptype="HFSSDriven")
 solver_setup_params = {"SolveType": 'Single',
                        # ('MultipleAdaptiveFreqsSetup',
                        #  SetupProps([('1GHz', [0.02]),
@@ -529,35 +695,55 @@ solver_setup_params = {"SolveType": 'Single',
 solver_setup.props.update(solver_setup_params)
 
 # frequency_sweep_params = {
-#     "unit": "GHz",
-#     "freqstart": frequency_GHz - 1.5,
-#     "freqstop": frequency_GHz + 1.5,
-#     "num_of_freq_points": 200,
-#     "sweepname": "sweep",
-#     "save_fields": True,
-#     "save_rad_fields": False,
-#     "sweep_type": "Discrete",
-#     "interpolation_tol": 0.5,
-#     "interpolation_max_solutions": 250
-# }
+#      "unit": "GHz",
+#      "freqstart": frequency_GHz - 1.5,
+#      "freqstop": frequency_GHz + 1.5,
+#      "num_of_freq_points": 200,
+#      "sweepname": "sweep",
+#      "save_fields": True,
+#      "save_rad_fields": False,
+#      "sweep_type": "Discrete",
+#      "interpolation_tol": 0.5,
+#      "interpolation_max_solutions": 250
+#  }
 # solver_setup.create_frequency_sweep(**frequency_sweep_params)
 
+##########################
+# NON-LINEAR OPTIMIZER   #
+##########################
+from scipy.optimize import minimize
 
-setup_ok = hfss.validate_full_design()
+initial_antenna_parameters = [num_patches, feed_trapezoid_start_width_mm, feed_trapezoid_length_mm,
+                              i_patch_length_mm, i_gap_length_mm, i_strip_width_mm]
+# make_antenna_design(antenna_parameters)
 
-setup_solver_configuration_params = {
-    "name": "MTS_SIWAntenna_Setup",
-    "num_cores": solver_configuration["num_cores"],
-    "num_tasks": 1,
-    "num_gpu": solver_configuration["num_gpu"],
-    "acf_file": None,
-    "use_auto_settings": True,
-    "num_variations_to_distribute": None,
-    "allowed_distribution_types": None,
-    "revert_to_initial_mesh": False,
-    "blocking": True
-}
-hfss.analyze_setup(**setup_solver_configuration_params)
+parameter_bounds = [(7, 13), (0.1, 0.6), (0.1, .9),
+                    (i_patch_length_mm - 0.5, i_patch_length_mm + 0.3),
+                    (i_gap_length_mm - 0.7, i_gap_length_mm + 0.3),
+                    (i_strip_width_mm - 0.4, i_strip_width_mm + 0.4)]
+minimize_options = {"maxiter": 80, "disp": True, "eps": [1, 0.1, 0.1, 0.1, 0.1, 0.1]}
+# Bounds on variables for Nelder-Mead, L-BFGS-B, TNC, SLSQP, Powell, trust-constr, and COBYLA methods
+result = minimize(antenna_design_error_function, initial_antenna_parameters,
+                  bounds=parameter_bounds, method="L-BFGS-B", options=minimize_options)
+
+print("Optimal parameters:", result.x)
+print("Minimum value:", result.fun)
+file_data.close()
+# setup_ok = hfss.validate_full_design()
+#
+# setup_solver_configuration_params = {
+#     "name": "LW_TL_Antenna_Setup",
+#     "num_cores": solver_configuration["num_cores"],
+#     "num_tasks": 1,
+#     "num_gpu": solver_configuration["num_gpu"],
+#     "acf_file": None,
+#     "use_auto_settings": True,
+#     "num_variations_to_distribute": None,
+#     "allowed_distribution_types": None,
+#     "revert_to_initial_mesh": False,
+#     "blocking": True
+# }
+# hfss.analyze_setup(**setup_solver_configuration_params)
 
 time_end = datetime.now()
 time_difference = time_end - time_start
