@@ -72,10 +72,10 @@ colors = {"metal": [143, 175, 143],
 time_start = datetime.now()
 current_time_str = datetime.now().strftime("%b%d_%H-%M-%S")
 
-project_name = "TL Antenna " + current_time_str
-design_name = "TL HFSS " + current_time_str
+project_name = "PatchArray Antenna " + current_time_str
+design_name = "PatchArray HFSS " + current_time_str
 
-save_file_prefix = "tl_antenna_100GHz"
+save_file_prefix = "patcharray_antenna_100GHz"
 save_filename_no_extension = save_file_prefix + "_" + current_time_str + "_" + socket.gethostname()
 save_filename_matlab = save_filename_no_extension + ".mat"
 save_filename_log = save_filename_no_extension + ".log"
@@ -84,33 +84,36 @@ optimization_parameters = ["num_patches", "trapezoid_width", "trapezoid_size_pct
 column_titles = ["s21_avg", "s11_avg", "error"]
 file_data.write("{}, {}, {}, {}, {}, {}\n".format(*optimization_parameters, *column_titles))
 
-num_patches = 16
-board_length_mm = 42
+board_length_mm = 22
 
 # strip_width_mm = 0.8  # mm
 # gap_length_mm = 1.5  # mm
 # patch_length_mm = 0.9  # mm
 
-i_height_mm = 0.7  # mm   <=== dielectric slab height in millimeters
+i_height_mm = 1.0  # mm   <=== dielectric slab height in millimeters
 height_mm = i_height_mm
 
 # i_strip_width_mm = wavelength_mm / 4 - 0.1  # mm
 # i_gap_length_mm = wavelength_mm / 2  # mm
 # i_patch_length_mm = wavelength_mm / 4  # mm
-i_strip_width_mm = 0.7  # mm
-i_gap_length_mm = 1.5  # mm
-i_patch_length_mm = 0.8  # mm
-i_phase_offset_mm = 0
-i_slot_width_pct = 0.8
+i_num_patches = 3
+i_strip_width_mm = 0.2  # mm
+i_strip_length_mm = 1.5  # mm
+i_patch_width_mm = wavelength_mm / 2  # mm
+i_patch_length_mm = wavelength_mm / 2  # mm
+i_gap_width_mm = wavelength_mm / 10
+i_gap_length_mm = wavelength_mm / 8
+i_feed_trap_length_pct = 0.5
 
-antenna_length_mm = num_patches * i_patch_length_mm + i_gap_length_mm * (num_patches + 1)  # mm
+antenna_length_mm = i_num_patches * i_patch_length_mm + i_num_patches * (i_strip_length_mm + 1)  # mm
 feed_length_mm = 0.5 * (board_length_mm - antenna_length_mm)
 feed_trapezoid_start_width_mm = 0.25  # mm
-feed_trapezoid_length_mm = 0.5 * feed_length_mm  # mm
+feed_trapezoid_length_mm = i_feed_trap_length_pct * feed_length_mm  # mm
 feed_rectangle_length_mm = feed_length_mm - feed_trapezoid_length_mm
 
 board_margin_xy_mm = np.array([2, 0])
-board_width_mm = i_strip_width_mm + 0.5  # 2 * board_margin_xy_mm[0]
+# board_width_mm = i_strip_width_mm + 0.5  # 2 * board_margin_xy_mm[0]
+board_width_mm = 5  # 2 * board_margin_xy_mm[0]
 antenna_dimensions_xy_mm = np.array([board_length_mm, board_width_mm])
 
 non_linear_feval_count = 0
@@ -128,38 +131,39 @@ def construct_antenna(o_antenna_parameters):
     # unpack optimization parameters
     o_num_patches = int(o_antenna_parameters[0])
     # o_antenna_length_mm = o_antenna_parameters[0]
-    o_feed_trapezoid_start_width_mm = o_antenna_parameters[1]
-    patch_length_mm = o_antenna_parameters[3]
-    gap_length_mm = o_antenna_parameters[4]
-    strip_width_mm = o_antenna_parameters[5]
-    patch_width_mm = o_antenna_parameters[6] * strip_width_mm
-    phase_offset_mm = o_antenna_parameters[7]
-    o_antenna_length_mm = o_num_patches * patch_length_mm + gap_length_mm * (o_num_patches + 1)  # mm
+    o_feed_trapezoid_start_width_mm = port_size_y_mm
+    strip_width_mm = o_antenna_parameters[1]
+    strip_length_mm = o_antenna_parameters[2]
+    patch_width_mm = o_antenna_parameters[3]
+    patch_length_mm = o_antenna_parameters[4]
+    o_antenna_length_mm = o_num_patches * patch_length_mm + strip_length_mm * (o_num_patches + 1)  # mm
     o_feed_length_mm = 0.5 * (board_length_mm - o_antenna_length_mm)
-    o_feed_trapezoid_length_mm = o_antenna_parameters[2] * o_feed_length_mm
+    o_feed_trapezoid_length_mm = o_antenna_parameters[5] * o_feed_length_mm
     o_feed_rectangle_length_mm = o_feed_length_mm - o_feed_trapezoid_length_mm
-    transmission_line_position = np.array([-0.5 * o_antenna_length_mm,
-                                           -0.5 * strip_width_mm,
-                                           0.5 * height_mm])
-    transmission_line_size = np.array([o_antenna_length_mm, strip_width_mm])
-    transmission_line_params = {"name": "transmission_line",
-                                "csPlane": "XY",
-                                "position": "{}mm,{}mm,{}mm".format(transmission_line_position[0],
-                                                                    transmission_line_position[1],
-                                                                    transmission_line_position[2]).split(","),
-                                "dimension_list": "{}mm,{}mm".format(transmission_line_size[0],
-                                                                     transmission_line_size[1]).split(","),
-                                "matname": ground_plane_material_name,
-                                "is_covered": True}
-    transmission_line_geom = hfss.modeler.create_rectangle(**transmission_line_params)
-    transmission_line_geom.color = metal_color
-    component_geometries.append(transmission_line_geom)
 
-    o_offset = -0.5 * o_antenna_length_mm + gap_length_mm + phase_offset_mm
+    o_offset = -0.5 * o_antenna_length_mm
     patch_geom_list = []
     patch_name_list = []
     for patch_index in np.arange(0, o_num_patches):
-        patch_position = np.array([o_offset,
+        transmission_line_position = np.array([o_offset,
+                                               -0.5 * strip_width_mm,
+                                               0.5 * height_mm])
+        transmission_line_size = np.array([strip_length_mm, strip_width_mm])
+        transmission_line_params = {"name": "transmission_line_" + str(patch_index),
+                                    "csPlane": "XY",
+                                    "position": "{}mm,{}mm,{}mm".format(transmission_line_position[0],
+                                                                        transmission_line_position[1],
+                                                                        transmission_line_position[2]).split(","),
+                                    "dimension_list": "{}mm,{}mm".format(transmission_line_size[0],
+                                                                         transmission_line_size[1]).split(","),
+                                    "matname": ground_plane_material_name,
+                                    "is_covered": True}
+        transmission_line_geom = hfss.modeler.create_rectangle(**transmission_line_params)
+        transmission_line_geom.color = metal_color
+        component_geometries.append(transmission_line_geom)
+        patch_name_list.append(transmission_line_geom.name)
+
+        patch_position = np.array([o_offset + strip_length_mm,
                                    -0.5 * patch_width_mm,
                                    0.5 * height_mm])
         patch_size = np.array([patch_length_mm, patch_width_mm])
@@ -174,25 +178,32 @@ def construct_antenna(o_antenna_parameters):
                         "is_covered": True}
         patch_geom = hfss.modeler.create_rectangle(**patch_params)
         patch_geom.color = metal_color
-        o_offset += gap_length_mm + patch_length_mm
+        o_offset += strip_length_mm + patch_length_mm
         patch_geom_list.append(patch_geom)
         patch_name_list.append(patch_geom.name)
-        # component_geometries.append(patch_geom)
+        component_geometries.append(patch_geom)
 
-    transmission_line_subtract_params = {
-        "blank_list": [transmission_line_geom.name],
-        "tool_list": patch_name_list,
-        "keep_originals": False
-    }
-    hfss.modeler.subtract(**transmission_line_subtract_params)
+    transmission_line_position = np.array([o_offset,
+                                           -0.5 * strip_width_mm,
+                                           0.5 * height_mm])
+    transmission_line_size = np.array([strip_length_mm, strip_width_mm])
+    transmission_line_params = {"name": "transmission_line_" + str(patch_index),
+                                "csPlane": "XY",
+                                "position": "{}mm,{}mm,{}mm".format(transmission_line_position[0],
+                                                                    transmission_line_position[1],
+                                                                    transmission_line_position[2]).split(","),
+                                "dimension_list": "{}mm,{}mm".format(transmission_line_size[0],
+                                                                     transmission_line_size[1]).split(","),
+                                "matname": ground_plane_material_name,
+                                "is_covered": True}
+    transmission_line_geom = hfss.modeler.create_rectangle(**transmission_line_params)
+    transmission_line_geom.color = metal_color
+    component_geometries.append(transmission_line_geom)
+    patch_name_list.append(transmission_line_geom.name)
 
     antenna_pec_boundary = hfss.assign_perfecte_to_sheets(
-        **{"sheet_list": [transmission_line_geom.name], "sourcename": None, "is_infinite_gnd": False})
+        **{"sheet_list": patch_name_list, "sourcename": None, "is_infinite_gnd": False})
     component_attributes.append(antenna_pec_boundary)
-
-    # antenna_pec_boundary = hfss.assign_perfecte_to_sheets(
-    #     **{"sheet_list": patch_name_list, "sourcename": None, "is_infinite_gnd": False})
-    # component_attributes.append(antenna_pec_boundary)
 
     port_index = 0
     #  build a feed structure having feed_length_mm length along the X axis (the propagation axis)
@@ -303,7 +314,12 @@ def construct_antenna(o_antenna_parameters):
                           feed_rect_geom_1.name, feed_trap_geom_1.name],
            "sourcename": None,
            "is_infinite_gnd": False})
+    # feed_pec_boundary = hfss.assign_perfecte_to_sheets(
+    #     **{"sheet_list": [feed_rect_geom_0.name, feed_trap_geom_0.name],
+    #        "sourcename": None,
+    #        "is_infinite_gnd": False})
     component_attributes.append(feed_pec_boundary)
+
     port_1_position = np.array([-0.5 * board_length_mm,
                                 # -0.5 * o_feed_trapezoid_start_width_mm,
                                 -0.5 * port_size_y_mm,
@@ -466,7 +482,7 @@ def antenna_design_error_function(o_antenna_parameters):
     theta_idxs_of_interest = np.argwhere((gain_theta_angles > -120) & (gain_theta_angles < 120))
 
     import scipy.signal.windows as windows
-    gaussian_window_samples = windows.gaussian(len(theta_idxs_of_interest), 30)
+    gaussian_window_samples = windows.gaussian(len(theta_idxs_of_interest), 8)
     gauss_max = np.max(gaussian_window_samples)
     gauss_min = np.min(gaussian_window_samples)
     gaussian_window_samples_shifted = ((gaussian_window_samples - gauss_min) / gauss_max)
@@ -483,7 +499,7 @@ def antenna_design_error_function(o_antenna_parameters):
     gain_term = np.average(20 * gaussian_window_samples_shifted * gain_theta_phi_0_vals[theta_idxs_of_interest])
     s21_term = np.average(s21_vals[freq_idxs_of_interest])
     s11_term = np.average(s11_vals[freq_idxs_of_interest])
-    error = -200 * gain_term + 3 * s11_term + s21_term
+    error = -10 * gain_term + 3 * s11_term + s21_term
     print("Error = {} Gain = {} S11 = {} S21 = {}".format(error, gain_term, s11_term, s21_term))
     file_data.write("{:.2f}, {:.2f}, {:.2f}, ".format(*o_antenna_parameters) +
                     "{:.2f}, {:.2f}, {:.2f}\n".format(np.average(s21_vals), np.average(s11_vals), error))
@@ -547,10 +563,10 @@ hfss.autosave_disable()
 # Define geometries
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ground_plane_position = -0.5 * np.array([antenna_dimensions_xy_mm[0],
-                                         antenna_dimensions_xy_mm[1] + 15,
+                                         antenna_dimensions_xy_mm[1] + 4,
                                          height_mm])
 ground_plane_size = np.array([antenna_dimensions_xy_mm[0],
-                              antenna_dimensions_xy_mm[1] + 15])
+                              antenna_dimensions_xy_mm[1] + 4])
 
 #  csPlane is either "XY", "YZ", or "XZ"
 
@@ -653,20 +669,20 @@ solver_setup.props.update(solver_setup_params)
 ##########################
 from scipy.optimize import minimize
 
-initial_antenna_parameters = [num_patches, feed_trapezoid_start_width_mm, feed_trapezoid_length_mm,
-                              i_patch_length_mm, i_gap_length_mm, i_strip_width_mm, i_slot_width_pct,
-                              i_phase_offset_mm]
-# make_antenna_design(antenna_parameters)
-
-parameter_bounds = [(12, 20),
-                    (0.1, 0.6),
-                    (0.1, .9),
-                    (i_patch_length_mm - 0.5, i_patch_length_mm + 0.3),
-                    (i_gap_length_mm - 0.7, i_gap_length_mm + 0.3),
-                    (i_strip_width_mm - 0.4, i_strip_width_mm + 0.4),
-                    (0.3, 0.9),
-                    (-wavelength_mm / 4, wavelength_mm / 4)]
-minimize_options = {"maxiter": 80, "disp": True, "eps": [1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.03, 0.01]}
+initial_antenna_parameters = [i_num_patches,
+                              i_strip_width_mm, i_strip_length_mm,
+                              i_patch_width_mm, i_patch_length_mm,
+                              i_feed_trap_length_pct]
+# i_gap_length_mm, i_gap_length_mm]
+parameter_bounds = [(2, 5),
+                    (i_strip_width_mm * 0.5, i_strip_width_mm * 1.2),
+                    (i_strip_length_mm * 0.1, i_strip_length_mm * 1.2),
+                    (i_patch_width_mm * 0.5, i_patch_width_mm * 1.2),
+                    (i_patch_length_mm * 0.5, i_patch_length_mm * 1.2),
+                    (0.1, 0.9)]
+# (i_gap_width_mm * 0.5, i_gap_length_mm *1.5),
+# (i_gap_length_mm - 0.7, i_gap_length_mm + 0.3)]
+minimize_options = {"maxiter": 80, "disp": True, "eps": [1, 0.1, 0.1, 0.1, 0.1, 0.05]}
 # Bounds on variables for Nelder-Mead, L-BFGS-B, TNC, SLSQP, Powell, trust-constr, and COBYLA methods
 result = minimize(antenna_design_error_function, initial_antenna_parameters,
                   bounds=parameter_bounds, method="L-BFGS-B", options=minimize_options)
