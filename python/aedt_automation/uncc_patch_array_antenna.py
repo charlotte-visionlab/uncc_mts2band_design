@@ -452,17 +452,17 @@ def antenna_design_error_function(o_antenna_parameters):
     gain_theta_phi_90_vals = np.array(
         list(gain_theta_phi_90_data.full_matrix_real_imag[0][gain_theta_channel_str].values()))
     gain_theta_angles = np.array(gain_theta_phi_0_data.primary_sweep_values)
-    theta_idxs_of_interest = np.argwhere((gain_theta_angles > -120) & (gain_theta_angles < 120))
+    theta_idxs_of_interest = np.argwhere((gain_theta_angles > -40) & (gain_theta_angles < 40))
 
     import scipy.signal.windows as windows
-    gaussian_window_samples = windows.gaussian(len(theta_idxs_of_interest), 7)
+    gaussian_window_samples = windows.gaussian(len(theta_idxs_of_interest), 15)
     gauss_max = np.max(gaussian_window_samples)
     gauss_min = np.min(gaussian_window_samples)
-    gaussian_window_samples_shifted = 20 * ((gaussian_window_samples - gauss_min) / gauss_max) - 10
+    gaussian_window_samples_shifted = 20 * ((gaussian_window_samples - gauss_min) / gauss_max)
     gain_avg = np.average(gain_theta_phi_0_vals[theta_idxs_of_interest].flatten())
     gain_term = -np.average(gaussian_window_samples_shifted * gain_theta_phi_0_vals[theta_idxs_of_interest])
 
-    error = -1 * gain_term + 3 * s11_term + s21_term
+    error = -20 * gain_term + 3 * s11_term + s21_term
     print("Error = {} Gain = {} S11 = {} S21 = {}".format(error, -1 * gain_term, 3 * s11_term, s21_term))
     file_data.write("{:.2f}, {:.2f}, {:.2f}, ".format(*o_antenna_parameters) +
                     "{:.2f}, {:.2f}, {:.2f}\n".format(np.average(s21_vals), np.average(s11_vals), error))
