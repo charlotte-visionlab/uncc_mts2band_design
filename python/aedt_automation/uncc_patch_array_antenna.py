@@ -39,7 +39,7 @@ solver_configuration = compute_config.SolverConfig().solver_config
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 speed_of_light = 2.99792458e8
 
-frequency_GHz = 75.0
+frequency_GHz = 80.0
 wavelength_mm = 1e3 * speed_of_light / (frequency_GHz * 1e9)
 
 # DIELECTRIC MATERIALS
@@ -90,7 +90,7 @@ board_length_mm = 22
 # gap_length_mm = 1.5  # mm
 # patch_length_mm = 0.9  # mm
 
-i_height_mm = 1.0  # mm   <=== dielectric slab height in millimeters
+i_height_mm = 0.09  # mm   <=== dielectric slab height in millimeters
 height_mm = i_height_mm
 
 # i_strip_width_mm = wavelength_mm / 4 - 0.1  # mm
@@ -98,7 +98,7 @@ height_mm = i_height_mm
 # i_patch_length_mm = wavelength_mm / 4  # mm
 i_num_patches = 3
 i_strip_width_mm = 0.2  # mm
-i_strip_length_mm = 1.5  # mm
+i_strip_length_mm = wavelength_mm / 2  # mm
 i_patch_width_mm = wavelength_mm / 2  # mm
 i_patch_length_mm = wavelength_mm / 2  # mm
 i_gap_width_mm = wavelength_mm / 10
@@ -113,7 +113,7 @@ feed_rectangle_length_mm = feed_length_mm - feed_trapezoid_length_mm
 
 board_margin_xy_mm = np.array([2, 0])
 # board_width_mm = i_strip_width_mm + 0.5  # 2 * board_margin_xy_mm[0]
-board_width_mm = 5  # 2 * board_margin_xy_mm[0]
+board_width_mm = 3  # 2 * board_margin_xy_mm[0]
 antenna_dimensions_xy_mm = np.array([board_length_mm, board_width_mm])
 
 non_linear_feval_count = 0
@@ -442,17 +442,46 @@ def antenna_design_error_function(o_antenna_parameters):
     s21_freqs_units_str = s21_solution_data.units_sweeps['Freq']  # 'GHz'
     s11_vals = s11_vals.reshape(s11_vals.size)
     s21_vals = s21_vals.reshape(s21_vals.size)
+    freq_idxs_of_interest = np.argwhere((s11_freqs > frequency_GHz - 1) & (s11_freqs < frequency_GHz + 1))
+    freq_idxs_of_interest = freq_idxs_of_interest.flatten()
+    s21_term = np.average(s21_vals[freq_idxs_of_interest])
+    s11_term = np.average(s11_vals[freq_idxs_of_interest])
 
     gain_theta_phi_0_vals = np.array(
         list(gain_theta_phi_0_data.full_matrix_real_imag[0][gain_theta_channel_str].values()))
     gain_theta_phi_90_vals = np.array(
         list(gain_theta_phi_90_data.full_matrix_real_imag[0][gain_theta_channel_str].values()))
     gain_theta_angles = np.array(gain_theta_phi_0_data.primary_sweep_values)
+    theta_idxs_of_interest = np.argwhere((gain_theta_angles > -120) & (gain_theta_angles < 120))
+
+    import scipy.signal.windows as windows
+    gaussian_window_samples = windows.gaussian(len(theta_idxs_of_interest), 7)
+    gauss_max = np.max(gaussian_window_samples)
+    gauss_min = np.min(gaussian_window_samples)
+    gaussian_window_samples_shifted = 20 * ((gaussian_window_samples - gauss_min) / gauss_max) - 10
+    gain_avg = np.average(gain_theta_phi_0_vals[theta_idxs_of_interest].flatten())
+    gain_term = -np.average(gaussian_window_samples_shifted * gain_theta_phi_0_vals[theta_idxs_of_interest])
+
+    error = -1 * gain_term + 3 * s11_term + s21_term
+    print("Error = {} Gain = {} S11 = {} S21 = {}".format(error, -1 * gain_term, 3 * s11_term, s21_term))
+    file_data.write("{:.2f}, {:.2f}, {:.2f}, ".format(*o_antenna_parameters) +
+                    "{:.2f}, {:.2f}, {:.2f}\n".format(np.average(s21_vals), np.average(s11_vals), error))
+
     plt.close(1)
     plt.close(2)
+
     plt.figure(1)
+    plt.plot(gaussian_window_samples_shifted)
+    plt.plot(gain_theta_phi_0_vals[theta_idxs_of_interest])
+    plt.plot(gaussian_window_samples_shifted * gain_theta_phi_0_vals[theta_idxs_of_interest].flatten())
+    plt.draw()
+    plt.pause(1)
+
+    plt.figure(2)
     plt.plot(gain_theta_angles, gain_theta_phi_0_vals)
-    plt.title("Antenna Gain @  {:.1f} GHz iteration {}".format(frequency_GHz, non_linear_feval_count))
+    plt.title("Antenna Gain @  {:.1f} GHz iteration {} S11={:.1f} S21={:.1f}".format(frequency_GHz,
+                                                                                     non_linear_feval_count,
+                                                                                     s11_term, s21_term))
     plt.plot(gain_theta_angles, gain_theta_phi_90_vals)
     plt.ylabel("Gain (dB)")
     x_axis_units_str = str(gain_theta_phi_0_data.units_sweeps['Theta'])
@@ -460,12 +489,6 @@ def antenna_design_error_function(o_antenna_parameters):
     plt.legend(["Phi=0 deg", "Phi=90 deg"])
     plt.draw()
     plt.pause(1)
-    # plt.plot(s21_freqs, s21_vals)
-    # plt.title("Non-Linear Optimization Evaluation " + str(non_linear_feval_count) +
-    #           ": x = ({:.2f})".format( design_geometry_params[0]))
-    # plt.ylabel("dB")
-    # plt.xlabel(s21_freqs_units_str)
-    # plt.legend(["S_11", "S_21"])
 
     plt.savefig('antenna_opt_gain_it{:03d}.png'.format(non_linear_feval_count))
 
@@ -478,31 +501,6 @@ def antenna_design_error_function(o_antenna_parameters):
     plot_obj.bounding_box = False
     plot_obj.plot("antenna_opt_model_it{:03d}.jpg".format(non_linear_feval_count))
 
-    freq_idxs_of_interest = np.argwhere((s11_freqs > frequency_GHz - 1) & (s11_freqs < frequency_GHz + 1))
-    theta_idxs_of_interest = np.argwhere((gain_theta_angles > -120) & (gain_theta_angles < 120))
-
-    import scipy.signal.windows as windows
-    gaussian_window_samples = windows.gaussian(len(theta_idxs_of_interest), 8)
-    gauss_max = np.max(gaussian_window_samples)
-    gauss_min = np.min(gaussian_window_samples)
-    gaussian_window_samples_shifted = ((gaussian_window_samples - gauss_min) / gauss_max)
-    gain_avg = np.average(gain_theta_phi_0_vals[theta_idxs_of_interest].flatten())
-    # error = np.sum(-s21_vals[freq_idxs_of_interest] < -2) + np.sum(s11_vals[freq_idxs_of_interest] > -9)
-    freq_idxs_of_interest = freq_idxs_of_interest.flatten()
-    plt.figure(2)
-    plt.plot(20 * gaussian_window_samples_shifted)
-    plt.plot(gain_theta_phi_0_vals[theta_idxs_of_interest])
-    plt.plot(
-        20 * gaussian_window_samples_shifted * (gain_theta_phi_0_vals[theta_idxs_of_interest].flatten() + gain_avg))
-    plt.draw()
-    plt.pause(1)
-    gain_term = np.average(20 * gaussian_window_samples_shifted * gain_theta_phi_0_vals[theta_idxs_of_interest])
-    s21_term = np.average(s21_vals[freq_idxs_of_interest])
-    s11_term = np.average(s11_vals[freq_idxs_of_interest])
-    error = -10 * gain_term + 3 * s11_term + s21_term
-    print("Error = {} Gain = {} S11 = {} S21 = {}".format(error, gain_term, s11_term, s21_term))
-    file_data.write("{:.2f}, {:.2f}, {:.2f}, ".format(*o_antenna_parameters) +
-                    "{:.2f}, {:.2f}, {:.2f}\n".format(np.average(s21_vals), np.average(s11_vals), error))
     for element in design_elements:
         element.delete()
     return error
