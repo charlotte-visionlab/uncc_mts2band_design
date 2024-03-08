@@ -4,3 +4,4 @@ scipy~=1.10.1
 pyaedt~=0.7.7
 matplotlib~=3.7.4
 jsonschema
+pyvista
