@@ -39,7 +39,7 @@ solver_configuration = compute_config.SolverConfig().solver_config
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 speed_of_light = 2.99792458e8
 
-frequency_GHz = 75.0
+frequency_GHz = 80.0
 wavelength_mm = 1e3 * speed_of_light / (frequency_GHz * 1e9)
 
 # DIELECTRIC MATERIALS
