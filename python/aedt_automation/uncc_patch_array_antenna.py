@@ -452,16 +452,16 @@ def antenna_design_error_function(o_antenna_parameters):
     gain_theta_phi_90_vals = np.array(
         list(gain_theta_phi_90_data.full_matrix_real_imag[0][gain_theta_channel_str].values()))
     gain_theta_angles = np.array(gain_theta_phi_0_data.primary_sweep_values)
-    theta_idxs_of_interest = np.argwhere((gain_theta_angles > -180) & (gain_theta_angles < 180))
-
+    theta_idxs_of_interest = np.argwhere((gain_theta_angles > -180) & (gain_theta_angles < 180)).flatten()
+    theta_idxs_of_interest.sort()
     import scipy.signal.windows as windows
     # gaussian_window_samples = windows.gaussian(len(theta_idxs_of_interest), 15)
     # Shape parameter. p = 1 is identical to gaussian, p = 0.5 is the same shape as the Laplace distribution.
-    gaussian_window_samples = windows.general_gaussian(len(theta_idxs_of_interest), p=0.5, sig=10, sym=True)
+    gaussian_window_samples = windows.general_gaussian(theta_idxs_of_interest.size, p=0.5, sig=10, sym=True)
     gauss_max = np.max(gaussian_window_samples)
     gauss_min = np.min(gaussian_window_samples)
     gaussian_window_samples_shifted = 20 * ((gaussian_window_samples - gauss_min) / gauss_max)
-    gain_avg = np.average(gain_theta_phi_0_vals[theta_idxs_of_interest].flatten())
+    gain_avg = np.average(gain_theta_phi_0_vals[theta_idxs_of_interest])
     gain_term = -np.average(gaussian_window_samples_shifted * gain_theta_phi_0_vals[theta_idxs_of_interest])
 
     error = -20 * gain_term + 3 * s11_term + s21_term
@@ -473,10 +473,10 @@ def antenna_design_error_function(o_antenna_parameters):
     plt.close(2)
 
     plt.figure(1)
-    plt.plot(gain_theta_angles[theta_idxs_of_interest], gaussian_window_samples_shifted[theta_idxs_of_interest])
+    plt.plot(gain_theta_angles[theta_idxs_of_interest], gaussian_window_samples_shifted)
     plt.plot(gain_theta_angles[theta_idxs_of_interest], gain_theta_phi_0_vals[theta_idxs_of_interest])
     plt.plot(gain_theta_angles[theta_idxs_of_interest],
-             gaussian_window_samples_shifted * gain_theta_phi_0_vals[theta_idxs_of_interest].flatten())
+             gaussian_window_samples_shifted * gain_theta_phi_0_vals[theta_idxs_of_interest])
     plt.draw()
     plt.pause(1)
 
