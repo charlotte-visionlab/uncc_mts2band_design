@@ -25,101 +25,12 @@ import numpy as np
 import uncc_mts_unit_cell as unit_cell
 import uncc_mts_compute_config as compute_config
 
-if platform.system() == "Linux":
-    os.environ["ANSYSEM_ROOT231"] = "/opt/AnsysEM/v231/Linux64/"
-else:
-    os.environ["ANSYSEM_ROOT231"] = "C:\\Program Files\\AnsysEM\\v231\\Win64\\"
+def construct_hf_lw_antenna(o_antenna_parameters, *args):
+    hfss, board_length_mm, height_mm, ground_plane_material_name, ground_plane_geom_name = args[0]
 
-aedt_version = "2023.1"
-
-solver_configuration = compute_config.SolverConfig().solver_config
-
-###############################################################################
-# Define program variables
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-speed_of_light = 2.99792458e8
-
-frequency_GHz = 80.0
-wavelength_mm = 1e3 * speed_of_light / (frequency_GHz * 1e9)
-
-# DIELECTRIC MATERIALS
-# dielectric_material_name = "Rogers RT/duroid 5880 (tm)"
-dielectric_material_name = "glass"
-# dielectric_material_name = "Rogers RT/duroid 6010/6010LM (tm)"
-ground_plane_material_name = "pec"
-# ground_plane_material_name = "copper"
-unit_cell_material_name = "pec"
-# unit_cell_material_name = "copper"
-# radiation_box_material_name = "vacuum"
-radiation_box_material_name = "air"
-
-# VISUALIZATION PREFERENCES
-metal_color = [143, 175, 143]  # green
-dielectric_color = [255, 255, 128]  # yellow
-radiation_box_color = [128, 255, 255]  # neon blue
-subtract_tool_color = [64, 64, 64]  # dary gray
-perfectly_matched_layer_color = [255, 128, 128]  # light red
-port_color = [31, 81, 255]  # blue
-
-colors = {"metal": [143, 175, 143],
-          "dielectric": [255, 255, 128],
-          "radiation box": [128, 255, 255],
-          "boolean tool": [64, 64, 64],
-          "perfectly matched layer": [255, 128, 128],
-          "port": [31, 81, 255]}
-
-# define a custom projectname and design name to allow multiple runs to simultaneously run on a single host
-time_start = datetime.now()
-current_time_str = datetime.now().strftime("%b%d_%H-%M-%S")
-
-project_name = "TL Antenna " + current_time_str
-design_name = "TL HFSS " + current_time_str
-
-save_file_prefix = "tl_antenna_100GHz"
-save_filename_no_extension = save_file_prefix + "_" + current_time_str + "_" + socket.gethostname()
-save_filename_matlab = save_filename_no_extension + ".mat"
-save_filename_log = save_filename_no_extension + ".log"
-file_data = open(save_filename_log, "w")
-optimization_parameters = ["num_patches", "trapezoid_width", "trapezoid_size_pct"]
-column_titles = ["s21_avg", "s11_avg", "error"]
-file_data.write("{}, {}, {}, {}, {}, {}\n".format(*optimization_parameters, *column_titles))
-
-num_patches = 16
-board_length_mm = 42
-
-# strip_width_mm = 0.8  # mm
-# gap_length_mm = 1.5  # mm
-# patch_length_mm = 0.9  # mm
-
-i_height_mm = 0.09  # mm   <=== dielectric slab height in millimeters
-height_mm = i_height_mm
-
-# i_strip_width_mm = wavelength_mm / 4 - 0.1  # mm
-# i_gap_length_mm = wavelength_mm / 2  # mm
-# i_patch_length_mm = wavelength_mm / 4  # mm
-i_strip_width_mm = 0.7  # mm
-i_gap_length_mm = 1.5  # mm
-i_patch_length_mm = 0.8  # mm
-i_phase_offset_mm = 0
-i_slot_width_pct = 0.8
-
-# [16.          0.1         0.83208329  0.47637579  1.39089786  0.59212755  0.74856038  0.3975069 ]
-
-antenna_length_mm = num_patches * i_patch_length_mm + i_gap_length_mm * (num_patches + 1)  # mm
-feed_length_mm = 0.5 * (board_length_mm - antenna_length_mm)
-feed_trapezoid_start_width_mm = 0.25  # mm
-feed_trapezoid_length_mm = 0.5 * feed_length_mm  # mm
-feed_rectangle_length_mm = feed_length_mm - feed_trapezoid_length_mm
-
-board_margin_xy_mm = np.array([2, 0])
-board_width_mm = i_strip_width_mm + 0.5  # 2 * board_margin_xy_mm[0]
-antenna_dimensions_xy_mm = np.array([board_length_mm, board_width_mm])
-
-non_linear_feval_count = 0
-
-
-def construct_antenna(o_antenna_parameters):
-    global hfss
+    # VISUALIZATION PREFERENCES
+    metal_color = [143, 175, 143]  # green
+    radiation_box_color = [128, 255, 255]  # neon blue
     port_size_y_mm = 0.5  # mm
 
     o_antenna_parameters[0] = int(o_antenna_parameters[0])
@@ -325,18 +236,18 @@ def construct_antenna(o_antenna_parameters):
     port_1_geom.color = radiation_box_color
     component_geometries.append(port_1_geom)
 
-    port_1_excitation_params = {"signal": port_1_geom,
-                                "reference": ground_plane_geom,
-                                "create_port_sheet": False,
-                                "port_on_plane": True,
-                                "integration_line": 0,
-                                "impedance": 50,
-                                "name": "port_1_excitation",
-                                "renormalize": True,
-                                "deembed": False,
-                                "terminals_rename": True}
-    lumped_port_1 = hfss.lumped_port(**port_1_excitation_params)
-    component_attributes.append(lumped_port_1)
+    # port_1_excitation_params = {"signal": port_1_geom,
+    #                             "reference": ground_plane_geom,
+    #                             "create_port_sheet": False,
+    #                             "port_on_plane": True,
+    #                             "integration_line": 0,
+    #                             "impedance": 50,
+    #                             "name": "port_1_excitation",
+    #                             "renormalize": True,
+    #                             "deembed": False,
+    #                             "terminals_rename": True}
+    # lumped_port_1 = hfss.lumped_port(**port_1_excitation_params)
+    # component_attributes.append(lumped_port_1)
 
     port_2_position = np.array([0.5 * board_length_mm,
                                 # -0.5 * o_feed_trapezoid_start_width_mm,
@@ -356,24 +267,25 @@ def construct_antenna(o_antenna_parameters):
     port_2_geom.color = radiation_box_color
     component_geometries.append(port_2_geom)
 
-    port_2_excitation_params = {"signal": port_2_geom,
-                                "reference": ground_plane_geom,
-                                "create_port_sheet": False,
-                                "port_on_plane": True,
-                                "integration_line": 0,
-                                "impedance": 50,
-                                "name": "port_2_excitation",
-                                "renormalize": True,
-                                "deembed": False,
-                                "terminals_rename": True}
-    lumped_port_2 = hfss.lumped_port(**port_2_excitation_params)
-    component_attributes.append(lumped_port_2)
-    return component_attributes + component_geometries
+    # port_2_excitation_params = {"signal": port_2_geom,
+    #                             "reference": ground_plane_geom,
+    #                             "create_port_sheet": False,
+    #                             "port_on_plane": True,
+    #                             "integration_line": 0,
+    #                             "impedance": 50,
+    #                             "name": "port_2_excitation",
+    #                             "renormalize": True,
+    #                             "deembed": False,
+    #                             "terminals_rename": True}
+    # lumped_port_2 = hfss.lumped_port(**port_2_excitation_params)
+    # component_attributes.append(lumped_port_2)
+    return component_geometries, component_attributes
 
 
 def antenna_design_error_function(o_antenna_parameters):
     global non_linear_feval_count
-    design_elements = construct_antenna(o_antenna_parameters)
+    design_geometries, design_attributes = construct_hf_lw_antenna(o_antenna_parameters)
+    design_elements = design_attributes + design_geometries
     setup_ok = hfss.validate_full_design()
     setup_solver_configuration_params = {
         "name": "LW_TL_Antenna_Setup",
@@ -517,310 +429,296 @@ def matplotlib_pyplot_setup():
     # plt.rc('x-axis', fontsize = SMALL_SIZE)
     # plt.rc('y-axis', fontsize = SMALL_SIZE)
 
+if __name__ == '__main__':
+    if platform.system() == "Linux":
+        os.environ["ANSYSEM_ROOT231"] = "/opt/AnsysEM/v231/Linux64/"
+    else:
+        os.environ["ANSYSEM_ROOT231"] = "C:\\Program Files\\AnsysEM\\v231\\Win64\\"
 
-matplotlib_pyplot_setup()
+    aedt_version = "2023.1"
 
-###############################################################################
-# Set non-graphical mode
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-non_graphical = False
+    solver_configuration = compute_config.SolverConfig().solver_config
 
-###############################################################################
-# Launch AEDT
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-NewThread = True
-desktop = pyaedt.launch_desktop(specified_version=aedt_version,
-                                non_graphical=non_graphical,
-                                new_desktop_session=NewThread)
+    ###############################################################################
+    # Define program variables
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    speed_of_light = 2.99792458e8
 
-# Solution Types are: { "Modal", "Terminal", "Eigenmode", "Transient Network", "SBR+", "Characteristic"}
-hfss = pyaedt.Hfss(
-    specified_version=aedt_version,
-    solution_type="Terminal",
-    new_desktop_session=True,
-    projectname=project_name,
-    designname=design_name,
-    close_on_exit=True,
-    non_graphical=non_graphical
-)
+    frequency_GHz = 80.0
+    wavelength_mm = 1e3 * speed_of_light / (frequency_GHz * 1e9)
 
-hfss.modeler.model_units = 'mm'
-# cm2mm = 10
-hfss.autosave_disable()
+    # DIELECTRIC MATERIALS
+    # dielectric_material_name = "Rogers RT/duroid 5880 (tm)"
+    dielectric_material_name = "glass"
+    # dielectric_material_name = "Rogers RT/duroid 6010/6010LM (tm)"
+    ground_plane_material_name = "pec"
+    # ground_plane_material_name = "copper"
+    unit_cell_material_name = "pec"
+    # unit_cell_material_name = "copper"
+    # radiation_box_material_name = "vacuum"
+    radiation_box_material_name = "air"
 
-###############################################################################
-# Define HFSS Variables
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# hfss.variable_manager.set_variable("wavelength", expression="{}mm".format(cm2mm * wavelength))
+    # VISUALIZATION PREFERENCES
+    metal_color = [143, 175, 143]  # green
+    dielectric_color = [255, 255, 128]  # yellow
+    radiation_box_color = [128, 255, 255]  # neon blue
+    subtract_tool_color = [64, 64, 64]  # dary gray
+    perfectly_matched_layer_color = [255, 128, 128]  # light red
+    port_color = [31, 81, 255]  # blue
 
-###############################################################################
-# Define geometries
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-ground_plane_position = -0.5 * np.array([antenna_dimensions_xy_mm[0],
-                                         antenna_dimensions_xy_mm[1] + 15,
-                                         height_mm])
-ground_plane_size = np.array([antenna_dimensions_xy_mm[0],
-                              antenna_dimensions_xy_mm[1] + 15])
+    colors = {"metal": [143, 175, 143],
+              "dielectric": [255, 255, 128],
+              "radiation box": [128, 255, 255],
+              "boolean tool": [64, 64, 64],
+              "perfectly matched layer": [255, 128, 128],
+              "port": [31, 81, 255]}
 
-#  csPlane is either "XY", "YZ", or "XZ"
+    # define a custom projectname and design name to allow multiple runs to simultaneously run on a single host
+    time_start = datetime.now()
+    current_time_str = datetime.now().strftime("%b%d_%H-%M-%S")
 
-ground_plane_params = {"name": "cell_ground_plane",
-                       "csPlane": "XY",
-                       "position": "{}mm,{}mm,{}mm".format(ground_plane_position[0],
-                                                           ground_plane_position[1],
-                                                           ground_plane_position[2]).split(","),
-                       "dimension_list": "{}mm,{}mm".format(ground_plane_size[0],
-                                                            ground_plane_size[1]).split(","),
-                       "matname": ground_plane_material_name,
-                       "is_covered": True}
-ground_plane_geom = hfss.modeler.create_rectangle(**ground_plane_params)
-ground_plane_geom.color = metal_color
+    project_name = "TL Antenna " + current_time_str
+    design_name = "TL HFSS " + current_time_str
 
-hfss.assign_perfecte_to_sheets(
-    **{"sheet_list": [ground_plane_geom.name],
-       "sourcename": None,
-       "is_infinite_gnd": False})
+    save_file_prefix = "tl_antenna_100GHz"
+    save_filename_no_extension = save_file_prefix + "_" + current_time_str + "_" + socket.gethostname()
+    save_filename_matlab = save_filename_no_extension + ".mat"
+    save_filename_log = save_filename_no_extension + ".log"
+    file_data = open(save_filename_log, "w")
+    optimization_parameters = ["num_patches", "trapezoid_width", "trapezoid_size_pct"]
+    column_titles = ["s21_avg", "s11_avg", "error"]
+    file_data.write("{}, {}, {}, {}, {}, {}\n".format(*optimization_parameters, *column_titles))
 
-# FIT ALL
-hfss.modeler.fit_all()
+    num_patches = 16
+    board_length_mm = 42
 
-dielectric_slab_position = -0.5 * np.array([antenna_dimensions_xy_mm[0],
-                                            antenna_dimensions_xy_mm[1],
-                                            height_mm])
-dielectric_slab_size = np.array([antenna_dimensions_xy_mm[0],
-                                 antenna_dimensions_xy_mm[1],
-                                 height_mm])
-dielectric_slab_params = {"name": "dielectric_slab",
-                          "position": "{}mm,{}mm,{}mm".format(dielectric_slab_position[0],
-                                                              dielectric_slab_position[1],
-                                                              dielectric_slab_position[2]).split(","),
-                          "dimensions_list": "{}mm,{}mm,{}mm".format(dielectric_slab_size[0],
-                                                                     dielectric_slab_size[1],
-                                                                     dielectric_slab_size[2]).split(","),
-                          "matname": dielectric_material_name}
-dielectric_slab_geom = hfss.modeler.create_box(**dielectric_slab_params)
-dielectric_slab_geom.color = dielectric_color
+    # strip_width_mm = 0.8  # mm
+    # gap_length_mm = 1.5  # mm
+    # patch_length_mm = 0.9  # mm
 
-open_region_params = {
-    "Frequency": "{}GHz".format(frequency_GHz),
-    "Boundary": "Radiation",
-    "ApplyInfiniteGP": False,
-    "GPAXis": "-z"}
-success = hfss.create_open_region(**open_region_params)
+    i_height_mm = 0.09  # mm   <=== dielectric slab height in millimeters
+    height_mm = i_height_mm
 
-solver_setup = hfss.create_setup(setupname="LW_TL_Antenna_Setup", setuptype="HFSSDriven")
-solver_setup_params = {"SolveType": 'Single',
-                       # ('MultipleAdaptiveFreqsSetup',
-                       #  SetupProps([('1GHz', [0.02]),
-                       #              ('2GHz', [0.02]),
-                       #              ('5GHz', [0.02])])),
-                       "Frequency": '{}GHz'.format(frequency_GHz),
-                       "MaxDeltaS": 0.03,
-                       "PortsOnly": False,
-                       "UseMatrixConv": False,
-                       "MaximumPasses": 30,
-                       "MinimumPasses": 1,
-                       "MinimumConvergedPasses": 1,
-                       "PercentRefinement": 30,
-                       "IsEnabled": True,
-                       # ('MeshLink', SetupProps([('ImportMesh', False)])),
-                       "BasisOrder": 1,
-                       "DoLambdaRefine": True,
-                       "DoMaterialLambda": True,
-                       "SetLambdaTarget": False,
-                       "Target": 0.3333,
-                       "UseMaxTetIncrease": False,
-                       "PortAccuracy": 2,
-                       "UseABCOnPort": False,
-                       "SetPortMinMaxTri": False,
-                       "UseDomains": False,
-                       "UseIterativeSolver": False,
-                       "SaveRadFieldsOnly": False,
-                       "SaveAnyFields": True,
-                       "IESolverType": "Auto",
-                       "LambdaTargetForIESolver": 0.15,
-                       "UseDefaultLambdaTgtForIESolver": True,
-                       "IE Solver Accuracy": 'Balanced'
-                       }
-solver_setup.props.update(solver_setup_params)
+    # i_strip_width_mm = wavelength_mm / 4 - 0.1  # mm
+    # i_gap_length_mm = wavelength_mm / 2  # mm
+    # i_patch_length_mm = wavelength_mm / 4  # mm
+    i_strip_width_mm = 0.7  # mm
+    i_gap_length_mm = 1.5  # mm
+    i_patch_length_mm = 0.8  # mm
+    i_phase_offset_mm = 0
+    i_slot_width_pct = 0.8
 
-# frequency_sweep_params = {
-#      "unit": "GHz",
-#      "freqstart": frequency_GHz - 1.5,
-#      "freqstop": frequency_GHz + 1.5,
-#      "num_of_freq_points": 200,
-#      "sweepname": "sweep",
-#      "save_fields": True,
-#      "save_rad_fields": False,
-#      "sweep_type": "Discrete",
-#      "interpolation_tol": 0.5,
-#      "interpolation_max_solutions": 250
-#  }
-# solver_setup.create_frequency_sweep(**frequency_sweep_params)
+    # [16.          0.1         0.83208329  0.47637579  1.39089786  0.59212755  0.74856038  0.3975069 ]
 
-##########################
-# NON-LINEAR OPTIMIZER   #
-##########################
-from scipy.optimize import minimize
+    antenna_length_mm = num_patches * i_patch_length_mm + i_gap_length_mm * (num_patches + 1)  # mm
+    feed_length_mm = 0.5 * (board_length_mm - antenna_length_mm)
+    feed_trapezoid_start_width_mm = 0.25  # mm
+    feed_trapezoid_length_mm = 0.5 * feed_length_mm  # mm
+    feed_rectangle_length_mm = feed_length_mm - feed_trapezoid_length_mm
 
-initial_antenna_parameters = [num_patches, feed_trapezoid_start_width_mm, feed_trapezoid_length_mm,
-                              i_patch_length_mm, i_gap_length_mm, i_strip_width_mm, i_slot_width_pct,
-                              i_phase_offset_mm]
-# make_antenna_design(antenna_parameters)
+    board_margin_xy_mm = np.array([2, 0])
+    board_width_mm = i_strip_width_mm + 0.5  # 2 * board_margin_xy_mm[0]
+    antenna_dimensions_xy_mm = np.array([board_length_mm, board_width_mm])
 
-parameter_bounds = [(12, 20),
-                    (0.1, 0.6),
-                    (0.1, .9),
-                    (i_patch_length_mm - 0.5, i_patch_length_mm + 0.3),
-                    (i_gap_length_mm - 0.7, i_gap_length_mm + 0.3),
-                    (i_strip_width_mm - 0.4, i_strip_width_mm + 0.4),
-                    (0.3, 0.9),
-                    (-wavelength_mm / 4, wavelength_mm / 4)]
-minimize_options = {"maxiter": 80, "disp": True, "eps": [1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.03, 0.01]}
-# Bounds on variables for Nelder-Mead, L-BFGS-B, TNC, SLSQP, Powell, trust-constr, and COBYLA methods
-result = minimize(antenna_design_error_function, initial_antenna_parameters,
-                  bounds=parameter_bounds, method="L-BFGS-B", options=minimize_options)
+    non_linear_feval_count = 0
 
-print("Optimal parameters:", result.x)
-print("Minimum value:", result.fun)
-file_data.close()
-# setup_ok = hfss.validate_full_design()
-#
-# setup_solver_configuration_params = {
-#     "name": "LW_TL_Antenna_Setup",
-#     "num_cores": solver_configuration["num_cores"],
-#     "num_tasks": 1,
-#     "num_gpu": solver_configuration["num_gpu"],
-#     "acf_file": None,
-#     "use_auto_settings": True,
-#     "num_variations_to_distribute": None,
-#     "allowed_distribution_types": None,
-#     "revert_to_initial_mesh": False,
-#     "blocking": True
-# }
-# hfss.analyze_setup(**setup_solver_configuration_params)
+    matplotlib_pyplot_setup()
 
-time_end = datetime.now()
-time_difference = time_end - time_start
-time_difference_str = str(time_difference)
-# matlab_dict = {
-#     # "num_cells": len(database),
-#     "global_cell_size": cell_size,
-#     # "database": database,
-#     "compute_start_timestamp": current_time_str,
-#     "compute_host": socket.gethostname(),
-#     "compute_duration": time_difference_str
-# }
-#
-# scipy.io.savemat(save_filename_matlab, matlab_dict)
-###############################################################################
-# Close Ansys Electronics Desktop
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# hfss.release_desktop(close_projects=True, close_desktop=True)
+    ###############################################################################
+    # Set non-graphical mode
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    non_graphical = False
 
-# analysis_plane_position = np.array([ground_plane_position[0], ground_plane_position[1], 0])
-# analysis_plane_size = ground_plane_size
-# analysis_plane_params = {"name": "plot_waveguide_mode",
-#                          "csPlane": "XY",
-#                          "position": "{}mm,{}mm,{}mm".format(analysis_plane_position[0],
-#                                                              analysis_plane_position[1],
-#                                                              analysis_plane_position[2]).split(","),
-#                          "dimension_list": "{}mm,{}mm".format(analysis_plane_size[0],
-#                                                               analysis_plane_size[1]).split(","),
-#                          "matname": None,
-#                          "is_covered": True}
-# analysis_plane_geom = hfss.modeler.create_rectangle(**analysis_plane_params)
-# analysis_plane_geom.color = radiation_box_color
-#
-# nf_x_direction = [1, 0, 0]
-# nf_y_direction = [0, 1, 0]
-# nf_z_direction = [0, 0, 1]
-# top_plane_field_cs_params = {"origin": "{}mm,{}mm,{}mm".format(0, 0, 2 * wavelength_mm).split(","),
-#                              "reference_cs": "Global",
-#                              "name": "top_2lambda_CS",
-#                              "mode": "axis",
-#                              "view": "iso",
-#                              "x_pointing": nf_x_direction,
-#                              "y_pointing": nf_y_direction,
-#                              "psi": 0,
-#                              "theta": 0,
-#                              "phi": 0,
-#                              "u": None
-#                              }
-# top_plane_field_cs = hfss.modeler.create_coordinate_system(**top_plane_field_cs_params)
-#
-# bottom_plane_field_cs_params = {"origin": "{}mm,{}mm,{}mm".format(0, 0, -2 * wavelength_mm).split(","),
-#                                 "reference_cs": "Global",
-#                                 "name": "bottom_2lambda_CS",
-#                                 "mode": "axis",
-#                                 "view": "iso",
-#                                 "x_pointing": nf_x_direction,
-#                                 "y_pointing": nf_y_direction,
-#                                 "psi": 0,
-#                                 "theta": 0,
-#                                 "phi": 0,
-#                                 "u": None
-#                                 }
-# bottom_plane_field_cs = hfss.modeler.create_coordinate_system(**bottom_plane_field_cs_params)
-#
-# left_plane_field_cs_params = {"origin": "{}mm,{}mm,{}mm".format(0,
-#                                                                 -0.5 * board_width_mm - 2 * wavelength_mm,
-#                                                                 0).split(","),
-#                               "reference_cs": "Global",
-#                               "name": "left_2lambda_CS",
-#                               "mode": "axis",
-#                               "view": "iso",
-#                               "x_pointing": nf_x_direction,
-#                               "y_pointing": nf_z_direction,
-#                               "psi": 0,
-#                               "theta": 0,
-#                               "phi": 0,
-#                               "u": None
-#                               }
-# left_plane_field_cs = hfss.modeler.create_coordinate_system(**left_plane_field_cs_params)
-# right_plane_field_cs_params = {"origin": "{}mm,{}mm,{}mm".format(0,
-#                                                                  0.5 * board_width_mm + 2 * wavelength_mm,
-#                                                                  0).split(","),
-#                                "reference_cs": "Global",
-#                                "name": "right_2lambda_CS",
-#                                "mode": "axis",
-#                                "view": "iso",
-#                                "x_pointing": nf_x_direction,
-#                                "y_pointing": nf_z_direction,
-#                                "psi": 0,
-#                                "theta": 0,
-#                                "phi": 0,
-#                                "u": None
-#                                }
-# right_plane_field_cs = hfss.modeler.create_coordinate_system(**right_plane_field_cs_params)
-#
-# back_plane_field_cs_params = {"origin": "{}mm,{}mm,{}mm".format(-0.5 * board_length_mm - 2 * wavelength_mm,
-#                                                                 0,
-#                                                                 0).split(","),
-#                               "reference_cs": "Global",
-#                               "name": "back_2lambda_CS",
-#                               "mode": "axis",
-#                               "view": "iso",
-#                               "x_pointing": nf_y_direction,
-#                               "y_pointing": nf_z_direction,
-#                               "psi": 0,
-#                               "theta": 0,
-#                               "phi": 0,
-#                               "u": None
-#                               }
-# back_plane_field_cs = hfss.modeler.create_coordinate_system(**back_plane_field_cs_params)
-# front_plane_field_cs_params = {"origin": "{}mm,{}mm,{}mm".format(0.5 * board_length_mm + 2 * wavelength_mm,
-#                                                                  0,
-#                                                                  0).split(","),
-#                                "reference_cs": "Global",
-#                                "name": "front_2lambda_CS",
-#                                "mode": "axis",
-#                                "view": "iso",
-#                                "x_pointing": nf_y_direction,
-#                                "y_pointing": nf_z_direction,
-#                                "psi": 0,
-#                                "theta": 0,
-#                                "phi": 0,
-#                                "u": None
-#                                }
-# front_plane_field_cs = hfss.modeler.create_coordinate_system(**front_plane_field_cs_params)
+    ###############################################################################
+    # Launch AEDT
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    NewThread = True
+    desktop = pyaedt.launch_desktop(specified_version=aedt_version,
+                                    non_graphical=non_graphical,
+                                    new_desktop_session=NewThread)
+
+    # Solution Types are: { "Modal", "Terminal", "Eigenmode", "Transient Network", "SBR+", "Characteristic"}
+    hfss = pyaedt.Hfss(
+        specified_version=aedt_version,
+        solution_type="Terminal",
+        new_desktop_session=True,
+        projectname=project_name,
+        designname=design_name,
+        close_on_exit=True,
+        non_graphical=non_graphical
+    )
+
+    hfss.modeler.model_units = 'mm'
+    # cm2mm = 10
+    hfss.autosave_disable()
+
+    ###############################################################################
+    # Define HFSS Variables
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # hfss.variable_manager.set_variable("wavelength", expression="{}mm".format(cm2mm * wavelength))
+
+    ###############################################################################
+    # Define geometries
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    ground_plane_position = -0.5 * np.array([antenna_dimensions_xy_mm[0],
+                                             antenna_dimensions_xy_mm[1] + 15,
+                                             height_mm])
+    ground_plane_size = np.array([antenna_dimensions_xy_mm[0],
+                                  antenna_dimensions_xy_mm[1] + 15])
+
+    #  csPlane is either "XY", "YZ", or "XZ"
+
+    ground_plane_params = {"name": "cell_ground_plane",
+                           "csPlane": "XY",
+                           "position": "{}mm,{}mm,{}mm".format(ground_plane_position[0],
+                                                               ground_plane_position[1],
+                                                               ground_plane_position[2]).split(","),
+                           "dimension_list": "{}mm,{}mm".format(ground_plane_size[0],
+                                                                ground_plane_size[1]).split(","),
+                           "matname": ground_plane_material_name,
+                           "is_covered": True}
+    ground_plane_geom = hfss.modeler.create_rectangle(**ground_plane_params)
+    ground_plane_geom.color = metal_color
+
+    hfss.assign_perfecte_to_sheets(
+        **{"sheet_list": [ground_plane_geom.name],
+           "sourcename": None,
+           "is_infinite_gnd": False})
+
+    # FIT ALL
+    hfss.modeler.fit_all()
+
+    dielectric_slab_position = -0.5 * np.array([antenna_dimensions_xy_mm[0],
+                                                antenna_dimensions_xy_mm[1],
+                                                height_mm])
+    dielectric_slab_size = np.array([antenna_dimensions_xy_mm[0],
+                                     antenna_dimensions_xy_mm[1],
+                                     height_mm])
+    dielectric_slab_params = {"name": "dielectric_slab",
+                              "position": "{}mm,{}mm,{}mm".format(dielectric_slab_position[0],
+                                                                  dielectric_slab_position[1],
+                                                                  dielectric_slab_position[2]).split(","),
+                              "dimensions_list": "{}mm,{}mm,{}mm".format(dielectric_slab_size[0],
+                                                                         dielectric_slab_size[1],
+                                                                         dielectric_slab_size[2]).split(","),
+                              "matname": dielectric_material_name}
+    dielectric_slab_geom = hfss.modeler.create_box(**dielectric_slab_params)
+    dielectric_slab_geom.color = dielectric_color
+
+    open_region_params = {
+        "Frequency": "{}GHz".format(frequency_GHz),
+        "Boundary": "Radiation",
+        "ApplyInfiniteGP": False,
+        "GPAXis": "-z"}
+    success = hfss.create_open_region(**open_region_params)
+
+    solver_setup = hfss.create_setup(setupname="LW_TL_Antenna_Setup", setuptype="HFSSDriven")
+    solver_setup_params = {"SolveType": 'Single',
+                           # ('MultipleAdaptiveFreqsSetup',
+                           #  SetupProps([('1GHz', [0.02]),
+                           #              ('2GHz', [0.02]),
+                           #              ('5GHz', [0.02])])),
+                           "Frequency": '{}GHz'.format(frequency_GHz),
+                           "MaxDeltaS": 0.03,
+                           "PortsOnly": False,
+                           "UseMatrixConv": False,
+                           "MaximumPasses": 30,
+                           "MinimumPasses": 1,
+                           "MinimumConvergedPasses": 1,
+                           "PercentRefinement": 30,
+                           "IsEnabled": True,
+                           # ('MeshLink', SetupProps([('ImportMesh', False)])),
+                           "BasisOrder": 1,
+                           "DoLambdaRefine": True,
+                           "DoMaterialLambda": True,
+                           "SetLambdaTarget": False,
+                           "Target": 0.3333,
+                           "UseMaxTetIncrease": False,
+                           "PortAccuracy": 2,
+                           "UseABCOnPort": False,
+                           "SetPortMinMaxTri": False,
+                           "UseDomains": False,
+                           "UseIterativeSolver": False,
+                           "SaveRadFieldsOnly": False,
+                           "SaveAnyFields": True,
+                           "IESolverType": "Auto",
+                           "LambdaTargetForIESolver": 0.15,
+                           "UseDefaultLambdaTgtForIESolver": True,
+                           "IE Solver Accuracy": 'Balanced'
+                           }
+    solver_setup.props.update(solver_setup_params)
+
+    # frequency_sweep_params = {
+    #      "unit": "GHz",
+    #      "freqstart": frequency_GHz - 1.5,
+    #      "freqstop": frequency_GHz + 1.5,
+    #      "num_of_freq_points": 200,
+    #      "sweepname": "sweep",
+    #      "save_fields": True,
+    #      "save_rad_fields": False,
+    #      "sweep_type": "Discrete",
+    #      "interpolation_tol": 0.5,
+    #      "interpolation_max_solutions": 250
+    #  }
+    # solver_setup.create_frequency_sweep(**frequency_sweep_params)
+
+    ##########################
+    # NON-LINEAR OPTIMIZER   #
+    ##########################
+    from scipy.optimize import minimize
+
+    initial_antenna_parameters = [num_patches, feed_trapezoid_start_width_mm, feed_trapezoid_length_mm,
+                                  i_patch_length_mm, i_gap_length_mm, i_strip_width_mm, i_slot_width_pct,
+                                  i_phase_offset_mm]
+    # make_antenna_design(antenna_parameters)
+
+    parameter_bounds = [(12, 20),
+                        (0.1, 0.6),
+                        (0.1, .9),
+                        (i_patch_length_mm - 0.5, i_patch_length_mm + 0.3),
+                        (i_gap_length_mm - 0.7, i_gap_length_mm + 0.3),
+                        (i_strip_width_mm - 0.4, i_strip_width_mm + 0.4),
+                        (0.3, 0.9),
+                        (-wavelength_mm / 4, wavelength_mm / 4)]
+    minimize_options = {"maxiter": 80, "disp": True, "eps": [1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.03, 0.01]}
+    extra_args = hfss, board_length_mm, height_mm, ground_plane_material_name, ground_plane_geom.name
+    # Bounds on variables for Nelder-Mead, L-BFGS-B, TNC, SLSQP, Powell, trust-constr, and COBYLA methods
+    result = minimize(antenna_design_error_function, x0=initial_antenna_parameters, args=extra_args,
+                      bounds=parameter_bounds, method="L-BFGS-B", options=minimize_options)
+
+    print("Optimal parameters:", result.x)
+    print("Minimum value:", result.fun)
+    file_data.close()
+    # setup_ok = hfss.validate_full_design()
+    #
+    # setup_solver_configuration_params = {
+    #     "name": "LW_TL_Antenna_Setup",
+    #     "num_cores": solver_configuration["num_cores"],
+    #     "num_tasks": 1,
+    #     "num_gpu": solver_configuration["num_gpu"],
+    #     "acf_file": None,
+    #     "use_auto_settings": True,
+    #     "num_variations_to_distribute": None,
+    #     "allowed_distribution_types": None,
+    #     "revert_to_initial_mesh": False,
+    #     "blocking": True
+    # }
+    # hfss.analyze_setup(**setup_solver_configuration_params)
+
+    time_end = datetime.now()
+    time_difference = time_end - time_start
+    time_difference_str = str(time_difference)
+    # matlab_dict = {
+    #     # "num_cells": len(database),
+    #     "global_cell_size": cell_size,
+    #     # "database": database,
+    #     "compute_start_timestamp": current_time_str,
+    #     "compute_host": socket.gethostname(),
+    #     "compute_duration": time_difference_str
+    # }
+    #
+    # scipy.io.savemat(save_filename_matlab, matlab_dict)
+    ###############################################################################
+    # Close Ansys Electronics Desktop
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # hfss.release_desktop(close_projects=True, close_desktop=True)
