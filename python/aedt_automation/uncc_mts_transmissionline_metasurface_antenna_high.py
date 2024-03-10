@@ -237,7 +237,7 @@ def construct_hf_lw_antenna(o_antenna_parameters, *args):
     component_geometries.append(port_1_geom)
 
     port_1_excitation_params = {"signal": port_1_geom,
-                                "reference": ground_plane_geom,
+                                "reference": ground_plane_geom_name,
                                 "create_port_sheet": False,
                                 "port_on_plane": True,
                                 "integration_line": 0,
@@ -268,7 +268,7 @@ def construct_hf_lw_antenna(o_antenna_parameters, *args):
     component_geometries.append(port_2_geom)
 
     port_2_excitation_params = {"signal": port_2_geom,
-                                "reference": ground_plane_geom,
+                                "reference": ground_plane_geom_name,
                                 "create_port_sheet": False,
                                 "port_on_plane": True,
                                 "integration_line": 0,
