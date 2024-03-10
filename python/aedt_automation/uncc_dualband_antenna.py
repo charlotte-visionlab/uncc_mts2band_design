@@ -133,7 +133,7 @@ dielectric_material_name = "Rogers RT/duroid 5880 (tm)"
 ground_plane_material_name = "pec"
 I_OMIT_MTS_UNIT_CELLS = False
 I_INSERT_HEXAGON_MTS_UNIT_CELLS = True
-I_USE_CONNECTORS = True
+I_USE_CONNECTORS = False
 
 ant1_geoms, ant1_attributes = construct_mts_lw_antenna(hfss=hfss,
                                                        height_mm=i_height1_mm,
@@ -155,11 +155,11 @@ i_strip_width_mm = 0.7  # mm
 i_slot_width_pct = 0.8
 i_phase_offset_mm = 0
 dielectric_material_name = "glass"
-
+frequency_GHz = 80
 antenna_parameters = [i_num_patches, i_feed_trapezoid_start_width_mm, i_feed_trapezoid_length_mm,
                       i_patch_length_mm, i_gap_length_mm, i_strip_width_mm, i_slot_width_pct,
                       i_phase_offset_mm]
-args = hfss, i_board_length_mm, i_height2_mm, ground_plane_material_name, "transmission_line"
+args = hfss, i_board_length_mm, i_height2_mm, ground_plane_material_name, "transmission_line", frequency_GHz
 
 x_offset = 2.6
 hfss.modeler.set_working_coordinate_system("Global")

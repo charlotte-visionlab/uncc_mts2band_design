@@ -26,7 +26,7 @@ import uncc_mts_unit_cell as unit_cell
 import uncc_mts_compute_config as compute_config
 
 def construct_hf_lw_antenna(o_antenna_parameters, *args):
-    hfss, board_length_mm, height_mm, ground_plane_material_name, ground_plane_geom_name = args[0]
+    hfss, board_length_mm, height_mm, ground_plane_material_name, ground_plane_geom_name, frequency_GHz = args[0]
 
     # VISUALIZATION PREFERENCES
     metal_color = [143, 175, 143]  # green
@@ -236,18 +236,18 @@ def construct_hf_lw_antenna(o_antenna_parameters, *args):
     port_1_geom.color = radiation_box_color
     component_geometries.append(port_1_geom)
 
-    # port_1_excitation_params = {"signal": port_1_geom,
-    #                             "reference": ground_plane_geom,
-    #                             "create_port_sheet": False,
-    #                             "port_on_plane": True,
-    #                             "integration_line": 0,
-    #                             "impedance": 50,
-    #                             "name": "port_1_excitation",
-    #                             "renormalize": True,
-    #                             "deembed": False,
-    #                             "terminals_rename": True}
-    # lumped_port_1 = hfss.lumped_port(**port_1_excitation_params)
-    # component_attributes.append(lumped_port_1)
+    port_1_excitation_params = {"signal": port_1_geom,
+                                "reference": ground_plane_geom,
+                                "create_port_sheet": False,
+                                "port_on_plane": True,
+                                "integration_line": 0,
+                                "impedance": 50,
+                                "name": "port_1_excitation",
+                                "renormalize": True,
+                                "deembed": False,
+                                "terminals_rename": True}
+    lumped_port_1 = hfss.lumped_port(**port_1_excitation_params)
+    component_attributes.append(lumped_port_1)
 
     port_2_position = np.array([0.5 * board_length_mm,
                                 # -0.5 * o_feed_trapezoid_start_width_mm,
@@ -267,24 +267,25 @@ def construct_hf_lw_antenna(o_antenna_parameters, *args):
     port_2_geom.color = radiation_box_color
     component_geometries.append(port_2_geom)
 
-    # port_2_excitation_params = {"signal": port_2_geom,
-    #                             "reference": ground_plane_geom,
-    #                             "create_port_sheet": False,
-    #                             "port_on_plane": True,
-    #                             "integration_line": 0,
-    #                             "impedance": 50,
-    #                             "name": "port_2_excitation",
-    #                             "renormalize": True,
-    #                             "deembed": False,
-    #                             "terminals_rename": True}
-    # lumped_port_2 = hfss.lumped_port(**port_2_excitation_params)
-    # component_attributes.append(lumped_port_2)
+    port_2_excitation_params = {"signal": port_2_geom,
+                                "reference": ground_plane_geom,
+                                "create_port_sheet": False,
+                                "port_on_plane": True,
+                                "integration_line": 0,
+                                "impedance": 50,
+                                "name": "port_2_excitation",
+                                "renormalize": True,
+                                "deembed": False,
+                                "terminals_rename": True}
+    lumped_port_2 = hfss.lumped_port(**port_2_excitation_params)
+    component_attributes.append(lumped_port_2)
     return component_geometries, component_attributes
 
 
-def antenna_design_error_function(o_antenna_parameters):
+def antenna_design_error_function(o_antenna_parameters, *args):
     global non_linear_feval_count
-    design_geometries, design_attributes = construct_hf_lw_antenna(o_antenna_parameters)
+    hfss, board_length_mm, height_mm, ground_plane_material_name, ground_plane_geom_name, frequency_GHz = args
+    design_geometries, design_attributes = construct_hf_lw_antenna(o_antenna_parameters, args)
     design_elements = design_attributes + design_geometries
     setup_ok = hfss.validate_full_design()
     setup_solver_configuration_params = {
@@ -496,7 +497,7 @@ if __name__ == '__main__':
     # gap_length_mm = 1.5  # mm
     # patch_length_mm = 0.9  # mm
 
-    i_height_mm = 0.09  # mm   <=== dielectric slab height in millimeters
+    i_height_mm = 0.13  # mm   <=== dielectric slab height in millimeters
     height_mm = i_height_mm
 
     # i_strip_width_mm = wavelength_mm / 4 - 0.1  # mm
@@ -681,7 +682,7 @@ if __name__ == '__main__':
                         (0.3, 0.9),
                         (-wavelength_mm / 4, wavelength_mm / 4)]
     minimize_options = {"maxiter": 80, "disp": True, "eps": [1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.03, 0.01]}
-    extra_args = hfss, board_length_mm, height_mm, ground_plane_material_name, ground_plane_geom.name
+    extra_args = hfss, board_length_mm, height_mm, ground_plane_material_name, ground_plane_geom.name, frequency_GHz
     # Bounds on variables for Nelder-Mead, L-BFGS-B, TNC, SLSQP, Powell, trust-constr, and COBYLA methods
     result = minimize(antenna_design_error_function, x0=initial_antenna_parameters, args=extra_args,
                       bounds=parameter_bounds, method="L-BFGS-B", options=minimize_options)
