@@ -270,11 +270,51 @@ def construct_mts_lw_antenna(hfss,
     feed_trap_geom_1.transparency = 0
     antenna_geom_list.append(feed_trap_geom_1)
 
+    layout_rect_size_mm = np.array([5, 6])
+    layout_pad_positions_x = np.array([-0.5 * antenna_dimensions_xy_mm[0],
+                                       0.5 * antenna_dimensions_xy_mm[0] - layout_rect_size_mm[0]])
+    layout_pads_name_list = []
+    for pad_index, x_position in enumerate(layout_pad_positions_x):
+        layout_rect_position = np.array([x_position,
+                                         -0.5 * 2 - layout_rect_size_mm[1],
+                                         0.5 * height_mm])
+        layout_rect_params = {"name": "layout_pad_" + str(pad_index) + "_0",
+                              "csPlane": "XY",
+                              "position": "{}mm,{}mm,{}mm".format(layout_rect_position[0],
+                                                                  layout_rect_position[1],
+                                                                  layout_rect_position[2]).split(","),
+                              "dimension_list": "{}mm,{}mm".format(layout_rect_size_mm[0],
+                                                                   layout_rect_size_mm[1]).split(","),
+                              "matname": ground_plane_material_name,
+                              "is_covered": True}
+        layout_rect_geom_0 = hfss.modeler.create_rectangle(**layout_rect_params)
+        layout_rect_geom_0.color = metal_color
+        layout_pads_name_list.append(layout_rect_geom_0.name)
+        antenna_geom_list.append(layout_rect_geom_0)
+
+        layout_rect_size_mm = np.array([5, 6])
+        layout_rect_position = np.array([x_position,
+                                         0.5 * 2,
+                                         0.5 * height_mm])
+        layout_rect_params = {"name": "layout_pad_" + str(pad_index) + "_1",
+                              "csPlane": "XY",
+                              "position": "{}mm,{}mm,{}mm".format(layout_rect_position[0],
+                                                                  layout_rect_position[1],
+                                                                  layout_rect_position[2]).split(","),
+                              "dimension_list": "{}mm,{}mm".format(layout_rect_size_mm[0],
+                                                                   layout_rect_size_mm[1]).split(","),
+                              "matname": ground_plane_material_name,
+                              "is_covered": True}
+        layout_rect_geom_1 = hfss.modeler.create_rectangle(**layout_rect_params)
+        layout_rect_geom_1.color = metal_color
+        layout_pads_name_list.append(layout_rect_geom_1.name)
+        antenna_geom_list.append(layout_rect_geom_1)
+
     antenna_boundary = hfss.assign_perfecte_to_sheets(
         **{"sheet_list": [ground_plane_geom.name,
                           transmission_line_plane_geom.name,
                           feed_rect_geom_0.name, feed_trap_geom_0.name,
-                          feed_rect_geom_1.name, feed_trap_geom_1.name],
+                          feed_rect_geom_1.name, feed_trap_geom_1.name] + layout_pads_name_list,
            "sourcename": None,
            "is_infinite_gnd": False})
     antenna_attr_list.append(antenna_boundary)
@@ -299,7 +339,7 @@ def construct_mts_lw_antenna(hfss,
             hole_geom = hfss.modeler.create_cylinder(**hole_params)
             hole_geom.color = radiation_box_color
             subtract_params = {
-                "blank_list": [dielectric_slab_geom.name, ground_plane_geom.name],
+                "blank_list": [dielectric_slab_geom.name, ground_plane_geom.name] + layout_pads_name_list,
                 "tool_list": [hole_geom.name],
                 "keep_originals": False
             }
@@ -782,8 +822,8 @@ if __name__ == '__main__':
     hfss.modeler.model_units = 'mm'
     # cm2mm = 10
     hfss.autosave_disable()
-
     antenna_geom_list, antenna_attr_list = construct_mts_lw_antenna(
+        hfss=hfss,
         height_mm=height_mm,
         ground_plane_material_name=ground_plane_material_name,
         dielectric_material_name=dielectric_material_name,
