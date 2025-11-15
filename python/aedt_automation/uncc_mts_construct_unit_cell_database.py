@@ -41,11 +41,11 @@ import uncc_mts_unit_cell as unit_cell
 import uncc_mts_compute_config as compute_config
 
 if platform.system() == "Linux":
-    os.environ["ANSYSEM_ROOT231"] = "/opt/AnsysEM/v231/Linux64/"
+    os.environ["ANSYSEM_ROOT252"] = "/opt/Ansys/v252/AnsysEM/"
 else:
-    os.environ["ANSYSEM_ROOT231"] = "C:\\Program Files\\AnsysEM\\v231\\Win64\\"
+    os.environ["ANSYSEM_ROOT252"] = "C:\\Program Files\\AnsysEM\\v231\\Win64\\"
 
-aedt_version = "2023.1"
+aedt_version = "2025.2"
 
 solver_configuration = compute_config.SolverConfig().solver_config
 
@@ -271,15 +271,15 @@ non_graphical = False
 # Launch AEDT
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 NewThread = True
-desktop = pyaedt.launch_desktop(specified_version=aedt_version,
+desktop = pyaedt.launch_desktop(version=aedt_version,
                                 non_graphical=non_graphical,
-                                new_desktop_session=NewThread)
+                                new_desktop=NewThread)
 
 # Solution Types are: { "Modal", "Terminal", "Eigenmode", "Transient Network", "SBR+", "Characteristic"}
 hfss = pyaedt.Hfss(
-    specified_version=aedt_version,
+    version=aedt_version,
     solution_type="Eigenmode",
-    new_desktop_session=True,
+    new_desktop=True,
     projectname=project_name,
     designname=design_name,
     close_on_exit=True,

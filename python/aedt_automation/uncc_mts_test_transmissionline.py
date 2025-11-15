@@ -26,11 +26,11 @@ import uncc_mts_unit_cell as unit_cell
 import uncc_mts_compute_config as compute_config
 
 if platform.system() == "Linux":
-    os.environ["ANSYSEM_ROOT231"] = "/opt/AnsysEM/v231/Linux64/"
+    os.environ["ANSYSEM_ROOT252"] = "/opt/Ansys/v252/AnsysEM/"
 else:
-    os.environ["ANSYSEM_ROOT231"] = "C:\\Program Files\\AnsysEM\\v231\\Win64\\"
+    os.environ["ANSYSEM_ROOT252"] = "C:\\Program Files\\AnsysEM\\v252\\Win64\\"
 
-aedt_version = "2023.1"
+aedt_version = "2025.2"
 
 solver_configuration = compute_config.SolverConfig().solver_config
 

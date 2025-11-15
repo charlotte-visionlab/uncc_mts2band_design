@@ -41,11 +41,11 @@ import uncc_mts_unit_cell as unit_cell
 import uncc_mts_compute_config as compute_config
 
 if platform.system() == "Linux":
-    os.environ["ANSYSEM_ROOT231"] = "/opt/AnsysEM/v231/Linux64/"
+    os.environ["ANSYSEM_ROOT231"] = "/opt/Ansys/v252/AnsysEM/"
 else:
     os.environ["ANSYSEM_ROOT231"] = "C:\\Program Files\\AnsysEM\\v231\\Win64\\"
 
-aedt_version = "2023.1"
+aedt_version = "2025.2"
 
 solver_configuration = compute_config.SolverConfig().solver_config
 
@@ -300,9 +300,7 @@ non_graphical = False
 # Launch AEDT
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 NewThread = True
-desktop = pyaedt.launch_desktop(specified_version=aedt_version,
-                                non_graphical=non_graphical,
-                                new_desktop_session=NewThread)
+desktop = pyaedt.launch_desktop()
 
 # Solution Types are: { "Modal", "Terminal", "Eigenmode", "Transient Network", "SBR+", "Characteristic"}
 hfss = pyaedt.Hfss(
@@ -326,7 +324,7 @@ hfss.variable_manager.set_variable("wavelength", expression="{}mm".format(cm2mm 
 
 ###############################################################################
 # Define geometries
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
 ground_plane_position = cm2mm * np.array([-antenna_coord_origin_xy_cm[0],
                                           -antenna_coord_origin_xy_cm[1],
                                           -height_cm / 2])
